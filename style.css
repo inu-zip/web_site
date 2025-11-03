@@ -2,14 +2,14 @@
 
 body {
   font-family: 'Noto Sans JP', sans-serif;
-  background: #fffafc;
+  background: #fefafc;
   color: #333;
   margin: 0;
   line-height: 1.8;
 }
 
 header {
-  background: linear-gradient(90deg, #ffb6c1, #ff69b4);
+  background: linear-gradient(90deg, #7fb6ff, #7f69e4);
   color: white;
   text-align: center;
   padding: 1.5em 0;
@@ -48,14 +48,15 @@ section {
 
 h2 {
   color: #ff69b4;
-  border-bottom: 2px solid #ffb6c1;
+  border-bottom: 2px solid #4f56f1;
   padding-bottom: 0.3em;
 }
 
 footer {
   text-align: center;
   padding: 1em 0;
-  background: #ffe4ec;
+  background: #7fe4ec;
   color: #555;
   font-size: 0.9em;
 }
+
