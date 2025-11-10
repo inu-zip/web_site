@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>入力2回＋うわあああああ</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 24px; }
+    label { display: block; margin-bottom: 8px; }
+    input[type="text"] { width: 100%; max-width: 480px; padding: 8px; }
+    button { margin-top: 12px; padding: 8px 12px; }
+    .output { margin-top: 20px; font-weight: bold; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>発狂！</h1>
+
+  <label for="text">入力</label>
+  <input id="text" type="text" placeholder="例）こんにちは" />
+
+  <button id="run">出力</button>
+
+  <div class="output" id="output"></div>
+
+  <script>
+    const input = document.getElementById('text');
+    const btn = document.getElementById('run');
+    const out = document.getElementById('output');
+
+    function generate() {
+      const v = input.value ?? '';
+      out.textContent = v + v + 'うわあああああ';
+    }
+
+    // ボタンで実行
+    btn.addEventListener('click', generate);
+
+    // Enterでも実行
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') generate();
+    });
+  </script>
+</body>
+</html>
