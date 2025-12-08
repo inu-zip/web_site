@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>ミニプログラム言語 使用可能関数:if/goto/func/while/globalなど</title>
+  <title>ミニ言語 関数例:if/goto/func/while/global</title>
   <style>
     body { font-family: sans-serif; padding: 1rem; background: #fafafa; }
     label { font-weight: bold; display: block; margin-top: 1rem; }
@@ -12,7 +12,7 @@
   </style>
 </head>
 <body>
-  <h1>ミニ言語（let / print / if / goto / func / while / global）</h1>
+  <h1>ミニ言語　関数例:（let / print / if / goto / func / while / global）</h1>
 
   <label for="src">プログラム入力:</label>
   <textarea id="src">global counter
@@ -129,10 +129,13 @@ print 999</textarea>
         funcs[name] = { args, body };
         pc++; // skip }
       } else if (line.startsWith("while ")) {
-        const parts = line.split(/\s+/);
-        const expr = parts[1];
-        const funcName = parts[2];
-        while (evalExpr(expr, env, funcs) !== 0) {
+        const rest = line.slice(6).trim();
+        const lastSpace = rest.lastIndexOf(' ');
+        if (lastSpace < 0) throw new Error("while 構文: 'while <式> <関数名>' の形式にしてください");
+        const condExpr = rest.slice(0, lastSpace).trim();
+        const funcName = rest.slice(lastSpace + 1).trim();
+
+        while (evalExpr(condExpr, env, funcs) !== 0) {
           const f = funcs[funcName];
           if (!f) throw new Error("未定義関数: " + funcName);
           const localEnv = Object.create(env);
@@ -142,10 +145,10 @@ print 999</textarea>
               ret = evalExpr(line2.slice(7), localEnv, funcs);
               break;
             } else if (line2.startsWith("let ")) {
-              const [, rest] = line2.split("let ");
-              const [name, ex] = rest.split("=");
-              localEnv[name.trim()] = evalExpr(ex.trim(), localEnv, funcs);
-              env[name.trim()] = localEnv[name.trim()]; // global共有
+              const [, rest2] = line2.split("let ");
+              const [name2, ex2] = rest2.split("=");
+              localEnv[name2.trim()] = evalExpr(ex2.trim(), localEnv, funcs);
+              env[name2.trim()] = localEnv[name2.trim()]; // global共有
             } else if (line2.startsWith("print ")) {
               outputCb(String(evalExpr(line2.slice(6), localEnv, funcs)));
             }
