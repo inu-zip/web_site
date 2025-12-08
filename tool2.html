@@ -2,182 +2,172 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>ミニ言語インタプリタ</title>
+  <title>ミニプログラム言語 使用可能関数:if/goto/func/while/globalなど</title>
   <style>
     body { font-family: sans-serif; padding: 1rem; background: #fafafa; }
-    h1 { margin-bottom: 0.5rem; }
     label { font-weight: bold; display: block; margin-top: 1rem; }
-    textarea { width: 100%; height: 180px; font-family: monospace; }
-    pre { background: #f0f0f0; padding: 0.75rem; white-space: pre-wrap; border: 1px solid #ccc; }
-    button { padding: 0.5rem 1rem; margin-top: 0.5rem; }
-    .section { margin-bottom: 1.5rem; }
+    textarea { width: 100%; height: 220px; font-family: monospace; }
+    pre { background: #f0f0f0; padding: 0.75rem; border: 1px solid #ccc; }
+    button { margin-top: 0.5rem; }
   </style>
 </head>
 <body>
-  <h1>ミニ言語（let / print / 四則演算 / float対応）</h1>
+  <h1>ミニ言語（let / print / if / goto / func / while / global）</h1>
 
-  <div class="section">
-    <label for="src">プログラム入力:</label>
-    <textarea id="src">let x = 2.5 + 3 * 4
-print x
-let y = (x - 5.5) / 3
-print y</textarea>
-    <button id="run">実行</button>
-  </div>
+  <label for="src">プログラム入力:</label>
+  <textarea id="src">global counter
+let counter = 0
 
-  <div class="section">
-    <label for="out">実行結果:</label>
-    <pre id="out"></pre>
-  </div>
+func loopBody() {
+  print counter
+  let counter = counter + 1
+  return 0
+}
+
+while counter < 3 loopBody
+print 999</textarea>
+  <button id="run">実行</button>
+
+  <label for="out">実行結果:</label>
+  <pre id="out"></pre>
 
 <script>
 (() => {
-  // ====== トークナイザ ======
-  function tokenize(input) {
-    const tokens = [];
-    const re = /\s+|\/\/[^\n]*|([A-Za-z_]\w*)|(\d+(?:\.\d+)?)|([()+\-*/=])/g;
-    let m;
-    while ((m = re.exec(input)) !== null) {
-      if (m[0].trim() === '' || m[0].startsWith('//')) continue;
-      if (m[1]) tokens.push({ type: 'IDENT', value: m[1] });
-      else if (m[2]) tokens.push({ type: 'NUMBER', value: Number(m[2]) });
-      else if (m[3]) tokens.push({ type: 'SYMBOL', value: m[3] });
-    }
-    return tokens;
+  // 行単位に分割
+  function parseLines(src) {
+    return src.split(/\n/).map(line => line.trim()).filter(l => l.length > 0);
   }
 
-  // ====== パーサ ======
-  function parse(tokens) {
-    let i = 0;
-    const peek = () => tokens[i];
-    const consume = (type, value=null) => {
-      const t = tokens[i];
-      if (!t || t.type !== type || (value !== null && t.value !== value)) {
-        throw new SyntaxError(`予期しないトークン: ${JSON.stringify(t)}; 期待: ${type}${value?(' '+value):''}`);
+  // 式評価（簡易）
+  function evalExpr(expr, env, funcs) {
+    // 関数呼び出し
+    const callMatch = expr.match(/^(\w+)\((.*)\)$/);
+    if (callMatch) {
+      const fname = callMatch[1];
+      const args = callMatch[2].split(",").map(s=>s.trim()).filter(s=>s);
+      const f = funcs[fname];
+      if (!f) throw new Error("未定義関数: "+fname);
+      const localEnv = Object.create(env);
+      f.args.forEach((a,i)=>{ localEnv[a]=evalExpr(args[i], env, funcs); });
+      let ret = 0;
+      for (let line of f.body) {
+        if (line.startsWith("return ")) {
+          ret = evalExpr(line.slice(7), localEnv, funcs);
+          break;
+        } else if (line.startsWith("let ")) {
+          const [, rest] = line.split("let ");
+          const [name, ex] = rest.split("=");
+          localEnv[name.trim()] = evalExpr(ex.trim(), localEnv, funcs);
+        } else if (line.startsWith("print ")) {
+          console.log(evalExpr(line.slice(6), localEnv, funcs));
+        }
       }
-      i++;
-      return t;
-    };
-
-    function parseProgram() {
-      const stmts = [];
-      while (i < tokens.length) {
-        stmts.push(parseStmt());
-      }
-      return { type: 'Program', body: stmts };
+      return ret;
     }
-
-    function parseStmt() {
-      const t = peek();
-      if (t && t.type === 'IDENT' && t.value === 'let') {
-        consume('IDENT', 'let');
-        const id = consume('IDENT');
-        consume('SYMBOL', '=');
-        const expr = parseExpr();
-        return { type: 'Let', id: id.value, expr };
-      }
-      if (t && t.type === 'IDENT' && t.value === 'print') {
-        consume('IDENT', 'print');
-        const expr = parseExpr();
-        return { type: 'Print', expr };
-      }
-      throw new SyntaxError(`文の先頭が不正です: ${JSON.stringify(t)}`);
-    }
-
-    function parseExpr() {
-      let node = parseTerm();
-      while (peek() && peek().type === 'SYMBOL' && (peek().value === '+' || peek().value === '-')) {
-        const op = consume('SYMBOL').value;
-        const right = parseTerm();
-        node = { type: 'Binary', op, left: node, right };
-      }
-      return node;
-    }
-
-    function parseTerm() {
-      let node = parseFactor();
-      while (peek() && peek().type === 'SYMBOL' && (peek().value === '*' || peek().value === '/')) {
-        const op = consume('SYMBOL').value;
-        const right = parseFactor();
-        node = { type: 'Binary', op, left: node, right };
-      }
-      return node;
-    }
-
-    function parseFactor() {
-      const t = peek();
-      if (!t) throw new SyntaxError('式が途中で終わっています');
-      if (t.type === 'NUMBER') { consume('NUMBER'); return { type: 'Number', value: t.value }; }
-      if (t.type === 'IDENT') {
-        if (t.value === 'let' || t.value === 'print') throw new SyntaxError('ここでキーワードは使えません');
-        consume('IDENT');
-        return { type: 'Var', name: t.value };
-      }
-      if (t.type === 'SYMBOL' && t.value === '(') {
-        consume('SYMBOL', '(');
-        const expr = parseExpr();
-        consume('SYMBOL', ')');
-        return expr;
-      }
-      throw new SyntaxError(`不正な因子: ${JSON.stringify(t)}`);
-    }
-
-    const ast = parseProgram();
-    if (i !== tokens.length) throw new SyntaxError('未消費のトークンがあります');
-    return ast;
+    // 変数置換
+    const replaced = expr.replace(/\b\w+\b/g, id => {
+      if (!isNaN(Number(id))) return id;
+      if (id in env) return env[id];
+      return id;
+    });
+    return Function("return "+replaced)();
   }
 
-  // ====== インタプリタ ======
-  function evaluate(ast, outputCb) {
+  // プログラム実行
+  function runProgram(lines, outputCb) {
     const env = Object.create(null);
+    const labels = {};
+    const funcs = {};
 
-    function evalExpr(node) {
-      switch (node.type) {
-        case 'Number': return node.value;
-        case 'Var':
-          if (!(node.name in env)) throw new ReferenceError(`未定義の変数: ${node.name}`);
-          return env[node.name];
-        case 'Binary': {
-          const l = evalExpr(node.left);
-          const r = evalExpr(node.right);
-          switch (node.op) {
-            case '+': return l + r;
-            case '-': return l - r;
-            case '*': return l * r;
-            case '/': return r === 0 ? (() => { throw new Error('ゼロ除算'); })() : l / r;
-            default: throw new Error(`未知の演算子: ${node.op}`);
+    // ラベル位置を記録
+    lines.forEach((line, idx) => {
+      if (line.startsWith("label ")) {
+        const name = line.split(/\s+/)[1];
+        labels[name] = idx;
+      }
+    });
+
+    let pc = 0;
+    while (pc < lines.length) {
+      const line = lines[pc];
+      if (line.startsWith("global ")) {
+        const name = line.split(/\s+/)[1];
+        env[name] = env[name] ?? 0;
+        pc++;
+      } else if (line.startsWith("let ")) {
+        const [, rest] = line.split("let ");
+        const [name, expr] = rest.split("=");
+        env[name.trim()] = evalExpr(expr.trim(), env, funcs);
+        pc++;
+      } else if (line.startsWith("print ")) {
+        outputCb(String(evalExpr(line.slice(6), env, funcs)));
+        pc++;
+      } else if (line.startsWith("goto ")) {
+        const label = line.split(/\s+/)[1];
+        pc = labels[label];
+      } else if (line.startsWith("if ")) {
+        const parts = line.split(/\s+/);
+        const expr = parts[1];
+        const label = parts[3];
+        if (evalExpr(expr, env, funcs) !== 0) {
+          pc = labels[label];
+        } else {
+          pc++;
+        }
+      } else if (line.startsWith("label ")) {
+        pc++;
+      } else if (line.startsWith("func ")) {
+        const m = line.match(/^func\s+(\w+)\(([^)]*)\)\s*{/);
+        const name = m[1];
+        const args = m[2].split(",").map(s=>s.trim()).filter(s=>s);
+        const body = [];
+        pc++;
+        while (pc < lines.length && !lines[pc].startsWith("}")) {
+          body.push(lines[pc]);
+          pc++;
+        }
+        funcs[name] = { args, body };
+        pc++; // skip }
+      } else if (line.startsWith("while ")) {
+        const parts = line.split(/\s+/);
+        const expr = parts[1];
+        const funcName = parts[2];
+        while (evalExpr(expr, env, funcs) !== 0) {
+          const f = funcs[funcName];
+          if (!f) throw new Error("未定義関数: " + funcName);
+          const localEnv = Object.create(env);
+          let ret = 0;
+          for (let line2 of f.body) {
+            if (line2.startsWith("return ")) {
+              ret = evalExpr(line2.slice(7), localEnv, funcs);
+              break;
+            } else if (line2.startsWith("let ")) {
+              const [, rest] = line2.split("let ");
+              const [name, ex] = rest.split("=");
+              localEnv[name.trim()] = evalExpr(ex.trim(), localEnv, funcs);
+              env[name.trim()] = localEnv[name.trim()]; // global共有
+            } else if (line2.startsWith("print ")) {
+              outputCb(String(evalExpr(line2.slice(6), localEnv, funcs)));
+            }
           }
         }
-        default: throw new Error(`未知の式ノード: ${node.type}`);
-      }
-    }
-
-    for (const stmt of ast.body) {
-      if (stmt.type === 'Let') {
-        env[stmt.id] = evalExpr(stmt.expr);
-      } else if (stmt.type === 'Print') {
-        const v = evalExpr(stmt.expr);
-        outputCb(String(v));
+        pc++;
       } else {
-        throw new Error(`未知の文ノード: ${stmt.type}`);
+        pc++;
       }
     }
   }
 
-  // ====== UI ======
+  // UI結線
   const srcEl = document.getElementById('src');
   const outEl = document.getElementById('out');
   document.getElementById('run').addEventListener('click', () => {
     outEl.textContent = '';
-    const input = srcEl.value;
     try {
-      const tokens = tokenize(input);
-      const ast = parse(tokens);
-      evaluate(ast, (line) => {
-        outEl.textContent += line + '\n';
-      });
-    } catch (e) {
-      outEl.textContent = 'エラー: ' + e.message;
+      const lines = parseLines(srcEl.value);
+      runProgram(lines, (line)=>{ outEl.textContent += line+"\n"; });
+    } catch(e) {
+      outEl.textContent = "エラー: "+e.message;
     }
   });
 })();
