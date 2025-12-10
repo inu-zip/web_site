@@ -1,179 +1,207 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <title>ミニ言語 関数例:if/goto/func/while/global</title>
+  <meta charset="utf-8" />
+  <title>Prozemiproj JSON 編集ツール</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { font-family: sans-serif; padding: 1rem; background: #fafafa; }
-    label { font-weight: bold; display: block; margin-top: 1rem; }
-    textarea { width: 100%; height: 220px; font-family: monospace; }
-    pre { background: #f0f0f0; padding: 0.75rem; border: 1px solid #ccc; }
-    button { margin-top: 0.5rem; }
+    body { font-family: system-ui, sans-serif; padding: 16px; line-height: 1.6; }
+    header { margin-bottom: 16px; }
+    .row { margin: 12px 0; }
+    textarea { width: 100%; height: 60vh; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    button { padding: 8px 12px; }
+    .file-list { font-size: 14px; color: #555; white-space: pre-wrap; }
+    .status { color: #0366d6; }
+    .error { color: #d73a49; }
   </style>
+  <!-- JSZip via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
 <body>
-  <h1>ミニ言語　関数例:（let / print / if / goto / func / while / global）</h1>
+  <header>
+    <h1>プロゼミ project.json 編集</h1>
+    <p>prozemiproj（ZIP）を読み込んで、project.json を編集して再圧縮します。</p>
+  </header>
 
-  <label for="src">プログラム入力:</label>
-  <textarea id="src">global counter
-let counter = 0
+  <div class="row">
+    <label for="fileInput"><strong>ファイル選択:</strong></label>
+    <input id="fileInput" type="file" accept=".prozemiproj,.zip" />
+  </div>
 
-func loopBody() {
-  print counter
-  let counter = counter + 1
-  return 0
-}
+  <div class="row">
+    <div class="status" id="status"></div>
+    <div class="error" id="error"></div>
+  </div>
 
-while counter < 3 loopBody
-print 999</textarea>
-  <button id="run">実行</button>
+  <div class="row">
+    <details>
+      <summary><strong>ZIP内ファイル一覧</strong></summary>
+      <div class="file-list" id="fileList"></div>
+    </details>
+  </div>
 
-  <label for="out">実行結果:</label>
-  <pre id="out"></pre>
+  <div class="row">
+    <label for="jsonArea"><strong>project.json</strong></label>
+    <textarea id="jsonArea" placeholder="ここに project.json が表示されます（編集可）"></textarea>
+  </div>
 
-<script>
-(() => {
-  // 行単位に分割
-  function parseLines(src) {
-    return src.split(/\n/).map(line => line.trim()).filter(l => l.length > 0);
-  }
+  <div class="row">
+    <button id="saveBtn" disabled>保存して .prozemiproj をダウンロード</button>
+  </div>
 
-  // 式評価（簡易）
-  function evalExpr(expr, env, funcs) {
-    // 関数呼び出し
-    const callMatch = expr.match(/^(\w+)\((.*)\)$/);
-    if (callMatch) {
-      const fname = callMatch[1];
-      const args = callMatch[2].split(",").map(s=>s.trim()).filter(s=>s);
-      const f = funcs[fname];
-      if (!f) throw new Error("未定義関数: "+fname);
-      const localEnv = Object.create(env);
-      f.args.forEach((a,i)=>{ localEnv[a]=evalExpr(args[i], env, funcs); });
-      let ret = 0;
-      for (let line of f.body) {
-        if (line.startsWith("return ")) {
-          ret = evalExpr(line.slice(7), localEnv, funcs);
-          break;
-        } else if (line.startsWith("let ")) {
-          const [, rest] = line.split("let ");
-          const [name, ex] = rest.split("=");
-          localEnv[name.trim()] = evalExpr(ex.trim(), localEnv, funcs);
-        } else if (line.startsWith("print ")) {
-          console.log(evalExpr(line.slice(6), localEnv, funcs));
-        }
-      }
-      return ret;
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const statusEl  = document.getElementById('status');
+    const errorEl   = document.getElementById('error');
+    const fileListEl= document.getElementById('fileList');
+    const jsonArea  = document.getElementById('jsonArea');
+    const saveBtn   = document.getElementById('saveBtn');
+
+    let currentZip = null;
+    let originalFiles = {}; // Map of path -> {data:Uint8Array|string, options:{binary:boolean}}
+    let projectJsonPath = null;
+
+    function resetUI() {
+      statusEl.textContent = '';
+      errorEl.textContent = '';
+      fileListEl.textContent = '';
+      jsonArea.value = '';
+      jsonArea.disabled = true;
+      saveBtn.disabled = true;
+      currentZip = null;
+      originalFiles = {};
+      projectJsonPath = null;
     }
-    // 変数置換
-    const replaced = expr.replace(/\b\w+\b/g, id => {
-      if (!isNaN(Number(id))) return id;
-      if (id in env) return env[id];
-      return id;
-    });
-    return Function("return "+replaced)();
-  }
 
-  // プログラム実行
-  function runProgram(lines, outputCb) {
-    const env = Object.create(null);
-    const labels = {};
-    const funcs = {};
+    fileInput.addEventListener('change', async (e) => {
+      resetUI();
+      const file = e.target.files?.[0];
+      if (!file) return;
 
-    // ラベル位置を記録
-    lines.forEach((line, idx) => {
-      if (line.startsWith("label ")) {
-        const name = line.split(/\s+/)[1];
-        labels[name] = idx;
+      statusEl.textContent = '読み込み中…';
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        currentZip = zip;
+
+        // List files and load them
+        const names = Object.keys(zip.files);
+        fileListEl.textContent = names.join('\n');
+
+        // Attempt to find project.json (root or nested)
+        const candidateNames = names.filter(n => n.endsWith('project.json'));
+        projectJsonPath = candidateNames.length ? candidateNames[0] : null;
+
+        if (!projectJsonPath) {
+          throw new Error('project.json が見つかりませんでした。ZIPの構造を確認してください。');
+        }
+
+        // Load project.json as text
+        const projectText = await zip.file(projectJsonPath).async('string');
+        jsonArea.value = projectText;
+        jsonArea.disabled = false;
+        saveBtn.disabled = false;
+
+        // Cache all other files so we can re-pack later
+        // Keep original binary/text; do not modify unless project.json
+        const loadPromises = names.map(async (name) => {
+          const entry = zip.files[name];
+          if (entry.dir) {
+            // Directories: remember them for structure
+            originalFiles[name] = { data: null, options: { dir: true } };
+          } else {
+            const isJson = name === projectJsonPath;
+            const isText = isJson || isLikelyText(name);
+            const data = await zip.file(name).async(isText ? 'string' : 'uint8array');
+            originalFiles[name] = { data, options: { binary: !isText } };
+          }
+        });
+
+        await Promise.all(loadPromises);
+
+        statusEl.textContent = `読み込み完了：${file.name}（${names.length}項目）`;
+      } catch (err) {
+        console.error(err);
+        errorEl.textContent = 'エラー: ' + (err?.message || String(err));
+        statusEl.textContent = '';
       }
     });
 
-    let pc = 0;
-    while (pc < lines.length) {
-      const line = lines[pc];
-      if (line.startsWith("global ")) {
-        const name = line.split(/\s+/)[1];
-        env[name] = env[name] ?? 0;
-        pc++;
-      } else if (line.startsWith("let ")) {
-        const [, rest] = line.split("let ");
-        const [name, expr] = rest.split("=");
-        env[name.trim()] = evalExpr(expr.trim(), env, funcs);
-        pc++;
-      } else if (line.startsWith("print ")) {
-        outputCb(String(evalExpr(line.slice(6), env, funcs)));
-        pc++;
-      } else if (line.startsWith("goto ")) {
-        const label = line.split(/\s+/)[1];
-        pc = labels[label];
-      } else if (line.startsWith("if ")) {
-        const parts = line.split(/\s+/);
-        const expr = parts[1];
-        const label = parts[3];
-        if (evalExpr(expr, env, funcs) !== 0) {
-          pc = labels[label];
-        } else {
-          pc++;
-        }
-      } else if (line.startsWith("label ")) {
-        pc++;
-      } else if (line.startsWith("func ")) {
-        const m = line.match(/^func\s+(\w+)\(([^)]*)\)\s*{/);
-        const name = m[1];
-        const args = m[2].split(",").map(s=>s.trim()).filter(s=>s);
-        const body = [];
-        pc++;
-        while (pc < lines.length && !lines[pc].startsWith("}")) {
-          body.push(lines[pc]);
-          pc++;
-        }
-        funcs[name] = { args, body };
-        pc++; // skip }
-      } else if (line.startsWith("while ")) {
-        const rest = line.slice(6).trim();
-        const lastSpace = rest.lastIndexOf(' ');
-        if (lastSpace < 0) throw new Error("while 構文: 'while <式> <関数名>' の形式にしてください");
-        const condExpr = rest.slice(0, lastSpace).trim();
-        const funcName = rest.slice(lastSpace + 1).trim();
+    saveBtn.addEventListener('click', async () => {
+      if (!currentZip || !projectJsonPath) return;
 
-        while (evalExpr(condExpr, env, funcs) !== 0) {
-          const f = funcs[funcName];
-          if (!f) throw new Error("未定義関数: " + funcName);
-          const localEnv = Object.create(env);
-          let ret = 0;
-          for (let line2 of f.body) {
-            if (line2.startsWith("return ")) {
-              ret = evalExpr(line2.slice(7), localEnv, funcs);
-              break;
-            } else if (line2.startsWith("let ")) {
-              const [, rest2] = line2.split("let ");
-              const [name2, ex2] = rest2.split("=");
-              localEnv[name2.trim()] = evalExpr(ex2.trim(), localEnv, funcs);
-              env[name2.trim()] = localEnv[name2.trim()]; // global共有
-            } else if (line2.startsWith("print ")) {
-              outputCb(String(evalExpr(line2.slice(6), localEnv, funcs)));
+      errorEl.textContent = '';
+      statusEl.textContent = '再圧縮中…';
+
+      try {
+        // Validate JSON before packing
+        const editedText = jsonArea.value;
+        try {
+          JSON.parse(editedText);
+        } catch (e) {
+          throw new Error('project.json が正しい JSON ではありません。構文を確認してください。');
+        }
+
+        // Create new zip
+        const outZip = new JSZip();
+
+        // Re-add all files, replacing project.json with edited text
+        for (const [path, meta] of Object.entries(originalFiles)) {
+          if (meta.options?.dir) {
+            outZip.folder(path);
+            continue;
+          }
+          if (path === projectJsonPath) {
+            outZip.file(path, editedText); // text
+          } else {
+            if (meta.options?.binary) {
+              outZip.file(path, meta.data); // binary
+            } else {
+              outZip.file(path, meta.data); // text
             }
           }
         }
-        pc++;
-      } else {
-        pc++;
-      }
-    }
-  }
 
-  // UI結線
-  const srcEl = document.getElementById('src');
-  const outEl = document.getElementById('out');
-  document.getElementById('run').addEventListener('click', () => {
-    outEl.textContent = '';
-    try {
-      const lines = parseLines(srcEl.value);
-      runProgram(lines, (line)=>{ outEl.textContent += line+"\n"; });
-    } catch(e) {
-      outEl.textContent = "エラー: "+e.message;
+        const blob = await outZip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        });
+
+        // Suggest original name with suffix
+        const original = fileInput.files?.[0]?.name || 'project.prozemiproj';
+        const outName = original.replace(/\.prozemiproj$/i, '')
+                                .replace(/\.zip$/i, '') + '_edited.prozemiproj';
+
+        downloadBlob(blob, outName);
+        statusEl.textContent = '保存完了：ダウンロードが開始されました。';
+      } catch (err) {
+        console.error(err);
+        errorEl.textContent = 'エラー: ' + (err?.message || String(err));
+        statusEl.textContent = '';
+      }
+    });
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
-  });
-})();
-</script>
+
+    // Heuristic to decide text vs binary for non-project.json files
+    function isLikelyText(name) {
+      const ext = name.split('.').pop().toLowerCase();
+      // Treat common text types as text; others as binary to avoid corrupting assets
+      return [
+        'txt', 'json', 'csv', 'md', 'xml', 'yaml', 'yml', 'js', 'ts', 'css', 'html'
+      ].includes(ext);
+    }
+  </script>
 </body>
 </html>
