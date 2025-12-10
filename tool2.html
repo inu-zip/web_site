@@ -1,207 +1,232 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <title>Prozemiproj JSON 編集ツール</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    body { font-family: system-ui, sans-serif; padding: 16px; line-height: 1.6; }
-    header { margin-bottom: 16px; }
-    .row { margin: 12px 0; }
-    textarea { width: 100%; height: 60vh; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    button { padding: 8px 12px; }
-    .file-list { font-size: 14px; color: #555; white-space: pre-wrap; }
-    .status { color: #0366d6; }
-    .error { color: #d73a49; }
-  </style>
-  <!-- JSZip via CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <meta charset="utf-8" />
+    <title>Prozemiproj JSON 編集ツール</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            padding: 16px;
+            line-height: 1.6;
+        }
+        header {
+            margin-bottom: 16px;
+        }
+        .row {
+            margin: 12px 0;
+        }
+        textarea {
+            width: 100%;
+            height: 60vh;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+        button {
+            padding: 8px 12px;
+        }
+        .file-list {
+            font-size: 14px;
+            color: #555;
+            white-space: pre-wrap;
+        }
+        .status {
+            color: #0366d6;
+        }
+        .error {
+            color: #d73a49;
+        }
+    </style>
+    <!-- JSZip via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
 <body>
-  <header>
-    <h1>プロゼミ project.json 編集</h1>
-    <p>prozemiproj（ZIP）を読み込んで、project.json を編集して再圧縮します。</p>
-  </header>
+    <header>
+        <h1>プロゼミ project.json 編集</h1>
+        <p>prozemiproj（ZIP）を読み込んで、project.json を編集して再圧縮します。</p>
+    </header>
 
-  <div class="row">
-    <label for="fileInput"><strong>ファイル選択:</strong></label>
-    <input id="fileInput" type="file" accept=".prozemiproj,.zip" />
-  </div>
+    <div class="row">
+        <label for="fileInput"><strong>ファイル選択:</strong></label>
+        <input id="fileInput" type="file" accept=".prozemiproj,.zip" />
+    </div>
 
-  <div class="row">
-    <div class="status" id="status"></div>
-    <div class="error" id="error"></div>
-  </div>
+    <div class="row">
+        <div class="status" id="status"></div>
+        <div class="error" id="error"></div>
+    </div>
 
-  <div class="row">
-    <details>
-      <summary><strong>ZIP内ファイル一覧</strong></summary>
-      <div class="file-list" id="fileList"></div>
-    </details>
-  </div>
+    <div class="row">
+        <details>
+            <summary><strong>ZIP内ファイル一覧</strong></summary>
+            <div class="file-list" id="fileList"></div>
+        </details>
+    </div>
 
-  <div class="row">
-    <label for="jsonArea"><strong>project.json</strong></label>
-    <textarea id="jsonArea" placeholder="ここに project.json が表示されます（編集可）"></textarea>
-  </div>
+    <div class="row">
+        <label for="jsonArea"><strong>project.json</strong></label>
+        <textarea id="jsonArea" placeholder="ここに project.json が表示されます（編集可）"></textarea>
+    </div>
 
-  <div class="row">
-    <button id="saveBtn" disabled>保存して .prozemiproj をダウンロード</button>
-  </div>
+    <div class="row">
+        <button id="saveBtn" disabled>保存して .prozemiproj をダウンロード</button>
+        <button id="formatBtn" disabled>JSON整形</button>
+    </div>
 
-  <script>
-    const fileInput = document.getElementById('fileInput');
-    const statusEl  = document.getElementById('status');
-    const errorEl   = document.getElementById('error');
-    const fileListEl= document.getElementById('fileList');
-    const jsonArea  = document.getElementById('jsonArea');
-    const saveBtn   = document.getElementById('saveBtn');
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const statusEl = document.getElementById('status');
+        const errorEl = document.getElementById('error');
+        const fileListEl = document.getElementById('fileList');
+        const jsonArea = document.getElementById('jsonArea');
+        const saveBtn = document.getElementById('saveBtn');
+        const formatBtn = document.getElementById('formatBtn');
 
-    let currentZip = null;
-    let originalFiles = {}; // Map of path -> {data:Uint8Array|string, options:{binary:boolean}}
-    let projectJsonPath = null;
+        let currentZip = null;
+        let originalFiles = {};
+        let projectJsonPath = null;
 
-    function resetUI() {
-      statusEl.textContent = '';
-      errorEl.textContent = '';
-      fileListEl.textContent = '';
-      jsonArea.value = '';
-      jsonArea.disabled = true;
-      saveBtn.disabled = true;
-      currentZip = null;
-      originalFiles = {};
-      projectJsonPath = null;
-    }
-
-    fileInput.addEventListener('change', async (e) => {
-      resetUI();
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      statusEl.textContent = '読み込み中…';
-
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const zip = await JSZip.loadAsync(arrayBuffer);
-        currentZip = zip;
-
-        // List files and load them
-        const names = Object.keys(zip.files);
-        fileListEl.textContent = names.join('\n');
-
-        // Attempt to find project.json (root or nested)
-        const candidateNames = names.filter(n => n.endsWith('project.json'));
-        projectJsonPath = candidateNames.length ? candidateNames[0] : null;
-
-        if (!projectJsonPath) {
-          throw new Error('project.json が見つかりませんでした。ZIPの構造を確認してください。');
+        function resetUI() {
+            statusEl.textContent = '';
+            errorEl.textContent = '';
+            fileListEl.textContent = '';
+            jsonArea.value = '';
+            jsonArea.disabled = true;
+            saveBtn.disabled = true;
+            formatBtn.disabled = true;
+            currentZip = null;
+            originalFiles = {};
+            projectJsonPath = null;
         }
 
-        // Load project.json as text
-        const projectText = await zip.file(projectJsonPath).async('string');
-        jsonArea.value = projectText;
-        jsonArea.disabled = false;
-        saveBtn.disabled = false;
+        fileInput.addEventListener('change', async (e) => {
+            resetUI();
+            const file = e.target.files?.[0];
+            if (!file) return;
 
-        // Cache all other files so we can re-pack later
-        // Keep original binary/text; do not modify unless project.json
-        const loadPromises = names.map(async (name) => {
-          const entry = zip.files[name];
-          if (entry.dir) {
-            // Directories: remember them for structure
-            originalFiles[name] = { data: null, options: { dir: true } };
-          } else {
-            const isJson = name === projectJsonPath;
-            const isText = isJson || isLikelyText(name);
-            const data = await zip.file(name).async(isText ? 'string' : 'uint8array');
-            originalFiles[name] = { data, options: { binary: !isText } };
-          }
-        });
+            statusEl.textContent = '読み込み中…';
 
-        await Promise.all(loadPromises);
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const zip = await JSZip.loadAsync(arrayBuffer);
+                currentZip = zip;
 
-        statusEl.textContent = `読み込み完了：${file.name}（${names.length}項目）`;
-      } catch (err) {
-        console.error(err);
-        errorEl.textContent = 'エラー: ' + (err?.message || String(err));
-        statusEl.textContent = '';
-      }
-    });
+                const names = Object.keys(zip.files);
+                fileListEl.textContent = names.join('\n');
 
-    saveBtn.addEventListener('click', async () => {
-      if (!currentZip || !projectJsonPath) return;
+                const candidateNames = names.filter(n => n.endsWith('project.json'));
+                projectJsonPath = candidateNames.length ? candidateNames[0] : null;
 
-      errorEl.textContent = '';
-      statusEl.textContent = '再圧縮中…';
+                if (!projectJsonPath) {
+                    throw new Error('project.json が見つかりませんでした。ZIPの構造を確認してください。');
+                }
 
-      try {
-        // Validate JSON before packing
-        const editedText = jsonArea.value;
-        try {
-          JSON.parse(editedText);
-        } catch (e) {
-          throw new Error('project.json が正しい JSON ではありません。構文を確認してください。');
-        }
+                const projectText = await zip.file(projectJsonPath).async('string');
+                jsonArea.value = projectText;
+                jsonArea.disabled = false;
+                saveBtn.disabled = false;
+                formatBtn.disabled = false;
 
-        // Create new zip
-        const outZip = new JSZip();
+                const loadPromises = names.map(async (name) => {
+                    const entry = zip.files[name];
+                    if (entry.dir) {
+                        originalFiles[name] = { data: null, options: { dir: true } };
+                    } else {
+                        const isJson = name === projectJsonPath;
+                        const isText = isJson || isLikelyText(name);
+                        const data = await zip.file(name).async(isText ? 'string' : 'uint8array');
+                        originalFiles[name] = { data, options: { binary: !isText } };
+                    }
+                });
 
-        // Re-add all files, replacing project.json with edited text
-        for (const [path, meta] of Object.entries(originalFiles)) {
-          if (meta.options?.dir) {
-            outZip.folder(path);
-            continue;
-          }
-          if (path === projectJsonPath) {
-            outZip.file(path, editedText); // text
-          } else {
-            if (meta.options?.binary) {
-              outZip.file(path, meta.data); // binary
-            } else {
-              outZip.file(path, meta.data); // text
+                await Promise.all(loadPromises);
+
+                statusEl.textContent = `読み込み完了：${file.name}（${names.length}項目）`;
+            } catch (err) {
+                console.error(err);
+                errorEl.textContent = 'エラー: ' + (err?.message || String(err));
+                statusEl.textContent = '';
             }
-          }
-        }
-
-        const blob = await outZip.generateAsync({
-          type: 'blob',
-          compression: 'DEFLATE',
-          compressionOptions: { level: 6 }
         });
 
-        // Suggest original name with suffix
-        const original = fileInput.files?.[0]?.name || 'project.prozemiproj';
-        const outName = original.replace(/\.prozemiproj$/i, '')
-                                .replace(/\.zip$/i, '') + '_edited.prozemiproj';
+        saveBtn.addEventListener('click', async () => {
+            if (!currentZip || !projectJsonPath) return;
 
-        downloadBlob(blob, outName);
-        statusEl.textContent = '保存完了：ダウンロードが開始されました。';
-      } catch (err) {
-        console.error(err);
-        errorEl.textContent = 'エラー: ' + (err?.message || String(err));
-        statusEl.textContent = '';
-      }
-    });
+            errorEl.textContent = '';
+            statusEl.textContent = '再圧縮中…';
 
-    function downloadBlob(blob, filename) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    }
+            try {
+                const editedText = jsonArea.value;
+                try {
+                    JSON.parse(editedText);
+                } catch (e) {
+                    throw new Error('project.json が正しい JSON ではありません。構文を確認してください。');
+                }
 
-    // Heuristic to decide text vs binary for non-project.json files
-    function isLikelyText(name) {
-      const ext = name.split('.').pop().toLowerCase();
-      // Treat common text types as text; others as binary to avoid corrupting assets
-      return [
-        'txt', 'json', 'csv', 'md', 'xml', 'yaml', 'yml', 'js', 'ts', 'css', 'html'
-      ].includes(ext);
-    }
-  </script>
+                const outZip = new JSZip();
+
+                for (const [path, meta] of Object.entries(originalFiles)) {
+                    if (meta.options?.dir) {
+                        outZip.folder(path);
+                        continue;
+                    }
+                    if (path === projectJsonPath) {
+                        outZip.file(path, editedText);
+                    } else {
+                        if (meta.options?.binary) {
+                            outZip.file(path, meta.data);
+                        } else {
+                            outZip.file(path, meta.data);
+                        }
+                    }
+                }
+
+                const blob = await outZip.generateAsync({
+                    type: 'blob',
+                    compression: 'DEFLATE',
+                    compressionOptions: { level: 6 }
+                });
+
+                const original = fileInput.files?.[0]?.name || 'project.prozemiproj';
+                const outName = original.replace(/\.prozemiproj$/i, '')
+                                        .replace(/\.zip$/i, '') + '_edited.prozemiproj';
+
+                downloadBlob(blob, outName);
+                statusEl.textContent = '保存完了：ダウンロードが開始されました。';
+            } catch (err) {
+                console.error(err);
+                errorEl.textContent = 'エラー: ' + (err?.message || String(err));
+                statusEl.textContent = '';
+            }
+        });
+
+        formatBtn.addEventListener('click', () => {
+            try {
+                const obj = JSON.parse(jsonArea.value);
+                jsonArea.value = JSON.stringify(obj, null, 4);
+                statusEl.textContent = "JSONを整形しました。";
+            } catch (err) {
+                errorEl.textContent = "JSON整形エラー: " + err.message;
+            }
+        });
+
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        function isLikelyText(name) {
+            const ext = name.split('.').pop().toLowerCase();
+            return [
+                'txt', 'json', 'csv', 'md', 'xml', 'yaml', 'yml', 'js',
+                'ts', 'css', 'html'
+            ].includes(ext);
+        }
+    </script>
 </body>
 </html>
