@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>掛け算ミニゲーム＋ランキング</title>
+  <title>掛け算ミニゲーム＋最高ストリークランキング</title>
   <style>
     body { font-family: sans-serif; background:#111; color:#eee; text-align:center; }
     .panel { background:#222; padding:20px; margin:10px auto; border-radius:10px; width:80%; max-width:600px; }
@@ -44,11 +44,12 @@
     <h2>統計</h2>
     <div>総問題数: <span id="totalQ">0</span></div>
     <div>正解数: <span id="correctQ">0</span></div>
-    <div>連続正解: <span id="streakQ">0</span></div>
+    <div>現在の連続正解: <span id="streakQ">0</span></div>
+    <div>最高ストリーク: <span id="maxStreakQ">0</span></div>
   </div>
 
   <div class="panel">
-    <h2>ランキング（モード別／連続正解数）</h2>
+    <h2>ランキング（モード別／最高ストリーク）</h2>
     <div id="ranking"></div>
   </div>
 
@@ -59,7 +60,7 @@
 <script>
   const state = {
     a:null, b:null,
-    total:0, correct:0, streak:0,
+    total:0, correct:0, streak:0, maxStreak:0,
     mode:"4", nickname:"名無し"
   };
 
@@ -70,6 +71,7 @@
   const totalQEl=document.getElementById("totalQ");
   const correctQEl=document.getElementById("correctQ");
   const streakQEl=document.getElementById("streakQ");
+  const maxStreakQEl=document.getElementById("maxStreakQ");
   const rankingEl=document.getElementById("ranking");
 
   function generateNumber(d){
@@ -96,6 +98,9 @@
     if(user===correct){
       state.correct++;
       state.streak++;
+      if(state.streak>state.maxStreak){
+        state.maxStreak=state.streak;
+      }
       feedbackEl.textContent="正解！";
       feedbackEl.className="feedback ok";
     }else{
@@ -105,6 +110,7 @@
     }
     correctQEl.textContent=state.correct;
     streakQEl.textContent=state.streak;
+    maxStreakQEl.textContent=state.maxStreak;
     updateRanking();
   }
 
@@ -131,9 +137,11 @@
     // 既存更新
     const existing=ranking.find(r=>r.nick===nick);
     if(existing){
-      existing.score=state.streak; // ★連続正解数を保存
+      if(state.maxStreak>existing.score){
+        existing.score=state.maxStreak; // ★最高ストリークを保存
+      }
     }else{
-      ranking.push({nick:nick,score:state.streak});
+      ranking.push({nick:nick,score:state.maxStreak});
     }
     // ソート＆上位5
     ranking.sort((a,b)=>b.score-a.score);
@@ -143,7 +151,7 @@
   }
 
   function showRanking(ranking){
-    let html="<table><tr><th>順位</th><th>ニックネーム</th><th>連続正解数</th></tr>";
+    let html="<table><tr><th>順位</th><th>ニックネーム</th><th>最高ストリーク</th></tr>";
     ranking.forEach((r,i)=>{
       html+=`<tr><td>${i+1}</td><td>${r.nick}</td><td>${r.score}</td></tr>`;
     });
