@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>掛け算ミニゲーム！！！！</title>
+  <title>掛け算ミニゲーム＋最高ストリークランキング</title>
   <style>
     body { font-family: sans-serif; background:#111; color:#eee; text-align:center; }
     .panel { background:#222; padding:20px; margin:10px auto; border-radius:10px; width:80%; max-width:600px; }
@@ -30,13 +30,12 @@
         <option value="4" selected>4桁</option>
       </select>
     </label>
-    <button id="newProblem">次の問題</button>
   </div>
 
   <div class="panel">
     <div id="operands">— × —</div>
     <input id="answer" type="number" placeholder="答えを入力">
-    <button id="submit">答える</button>
+    <button id="actionBtn">答える</button>
     <div id="feedback"></div>
   </div>
 
@@ -60,8 +59,9 @@
 <script>
   const state = {
     a:null, b:null,
-    total:0, correct:0, streak:0, maxStreak:0,
-    mode:"4", nickname:"名無し"
+    total:0, correct:0,
+    mode:"4", nickname:"名無し",
+    stats:{} // モードごとの streak と maxStreak
   };
 
   const digitsEl=document.getElementById("digits");
@@ -73,6 +73,9 @@
   const streakQEl=document.getElementById("streakQ");
   const maxStreakQEl=document.getElementById("maxStreakQ");
   const rankingEl=document.getElementById("ranking");
+  const actionBtn=document.getElementById("actionBtn");
+
+  let awaitingAnswer=true;
 
   function generateNumber(d){
     const min=Math.pow(10,d-1);
@@ -80,14 +83,24 @@
     return Math.floor(Math.random()*(max-min+1))+min;
   }
 
+  function ensureStats(mode){
+    if(!state.stats[mode]){
+      state.stats[mode]={streak:0,maxStreak:0};
+    }
+  }
+
   function newProblem(){
     state.mode=digitsEl.value;
+    ensureStats(state.mode);
     state.a=generateNumber(parseInt(state.mode));
     state.b=generateNumber(parseInt(state.mode));
     operandsEl.textContent=`${state.a} × ${state.b}`;
     answerEl.value="";
     feedbackEl.textContent="";
     feedbackEl.className="feedback";
+    awaitingAnswer=true;
+    actionBtn.textContent="答える";
+    updateStatsDisplay();
   }
 
   function checkAnswer(){
@@ -97,21 +110,27 @@
     totalQEl.textContent=state.total;
     if(user===correct){
       state.correct++;
-      state.streak++;
-      if(state.streak>state.maxStreak){
-        state.maxStreak=state.streak;
+      state.stats[state.mode].streak++;
+      if(state.stats[state.mode].streak>state.stats[state.mode].maxStreak){
+        state.stats[state.mode].maxStreak=state.stats[state.mode].streak;
       }
       feedbackEl.textContent="正解！";
       feedbackEl.className="feedback ok";
     }else{
-      state.streak=0;
+      state.stats[state.mode].streak=0;
       feedbackEl.textContent=`不正解… 正解は ${correct}`;
       feedbackEl.className="feedback ng";
     }
     correctQEl.textContent=state.correct;
-    streakQEl.textContent=state.streak;
-    maxStreakQEl.textContent=state.maxStreak;
+    updateStatsDisplay();
     updateRanking();
+    awaitingAnswer=false;
+    actionBtn.textContent="次の問題";
+  }
+
+  function updateStatsDisplay(){
+    streakQEl.textContent=state.stats[state.mode].streak;
+    maxStreakQEl.textContent=state.stats[state.mode].maxStreak;
   }
 
   // Cookie操作
@@ -134,16 +153,15 @@
     state.nickname=nick;
     const key="ranking_"+state.mode;
     let ranking=JSON.parse(getCookie(key)||"[]");
-    // 既存更新
     const existing=ranking.find(r=>r.nick===nick);
+    const score=state.stats[state.mode].maxStreak;
     if(existing){
-      if(state.maxStreak>existing.score){
-        existing.score=state.maxStreak; // ★最高ストリークを保存
+      if(score>existing.score){
+        existing.score=score;
       }
     }else{
-      ranking.push({nick:nick,score:state.maxStreak});
+      ranking.push({nick:nick,score:score});
     }
-    // ソート＆上位5
     ranking.sort((a,b)=>b.score-a.score);
     ranking=ranking.slice(0,5);
     setCookie(key,JSON.stringify(ranking),365);
@@ -159,15 +177,24 @@
     rankingEl.innerHTML=html;
   }
 
-  // 初期化
-  document.getElementById("newProblem").addEventListener("click",newProblem);
-  document.getElementById("submit").addEventListener("click",checkAnswer);
+  // ボタン統一
+  actionBtn.addEventListener("click",()=>{
+    if(awaitingAnswer){
+      checkAnswer();
+    }else{
+      newProblem();
+    }
+  });
+
   digitsEl.addEventListener("change",()=>{newProblem();loadRanking();});
   function loadRanking(){
     const key="ranking_"+digitsEl.value;
     const ranking=JSON.parse(getCookie(key)||"[]");
     showRanking(ranking);
+    ensureStats(digitsEl.value);
+    updateStatsDisplay();
   }
+
   newProblem();
   loadRanking();
 </script>
