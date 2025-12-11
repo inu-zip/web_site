@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>掛け算ミニゲーム＋ランキング</title>
+  <style>
+    body { font-family: sans-serif; background:#111; color:#eee; text-align:center; }
+    .panel { background:#222; padding:20px; margin:10px auto; border-radius:10px; width:80%; max-width:600px; }
+    input, select, button { padding:8px; margin:5px; border-radius:5px; border:1px solid #555; }
+    button { background:#444; color:#fff; cursor:pointer; }
+    button:hover { background:#666; }
+    .feedback.ok { color:lime; font-weight:bold; }
+    .feedback.ng { color:red; font-weight:bold; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th, td { border:1px solid #555; padding:6px; }
+    th { background:#333; }
+  </style>
+</head>
+<body>
+  <h1>掛け算ミニゲーム</h1>
+
+  <div class="panel">
+    <label>ニックネーム: <input id="nickname" placeholder="入力してください"></label><br>
+    <label>桁数:
+      <select id="digits">
+        <option value="1">1桁</option>
+        <option value="2">2桁</option>
+        <option value="3">3桁</option>
+        <option value="4" selected>4桁</option>
+      </select>
+    </label>
+    <button id="newProblem">次の問題</button>
+  </div>
+
+  <div class="panel">
+    <div id="operands">— × —</div>
+    <input id="answer" type="number" placeholder="答えを入力">
+    <button id="submit">答える</button>
+    <div id="feedback"></div>
+  </div>
+
+  <div class="panel">
+    <h2>統計</h2>
+    <div>総問題数: <span id="totalQ">0</span></div>
+    <div>正解数: <span id="correctQ">0</span></div>
+    <div>連続正解: <span id="streakQ">0</span></div>
+  </div>
+
+  <div class="panel">
+    <h2>ランキング（モード別）</h2>
+    <div id="ranking"></div>
+  </div>
+
+<script>
+  const state = {
+    a:null, b:null,
+    total:0, correct:0, streak:0,
+    mode:"4", nickname:"名無し"
+  };
+
+  const digitsEl=document.getElementById("digits");
+  const operandsEl=document.getElementById("operands");
+  const answerEl=document.getElementById("answer");
+  const feedbackEl=document.getElementById("feedback");
+  const totalQEl=document.getElementById("totalQ");
+  const correctQEl=document.getElementById("correctQ");
+  const streakQEl=document.getElementById("streakQ");
+  const rankingEl=document.getElementById("ranking");
+
+  function generateNumber(d){
+    const min=Math.pow(10,d-1);
+    const max=Math.pow(10,d)-1;
+    return Math.floor(Math.random()*(max-min+1))+min;
+  }
+
+  function newProblem(){
+    state.mode=digitsEl.value;
+    state.a=generateNumber(parseInt(state.mode));
+    state.b=generateNumber(parseInt(state.mode));
+    operandsEl.textContent=`${state.a} × ${state.b}`;
+    answerEl.value="";
+    feedbackEl.textContent="";
+    feedbackEl.className="feedback";
+  }
+
+  function checkAnswer(){
+    const user=Number(answerEl.value);
+    const correct=state.a*state.b;
+    state.total++;
+    totalQEl.textContent=state.total;
+    if(user===correct){
+      state.correct++;
+      state.streak++;
+      feedbackEl.textContent="正解！";
+      feedbackEl.className="feedback ok";
+    }else{
+      state.streak=0;
+      feedbackEl.textContent=`不正解… 正解は ${correct}`;
+      feedbackEl.className="feedback ng";
+    }
+    correctQEl.textContent=state.correct;
+    streakQEl.textContent=state.streak;
+    updateRanking();
+  }
+
+  // Cookie操作
+  function setCookie(name,value,days){
+    const d=new Date();
+    d.setTime(d.getTime()+days*24*60*60*1000);
+    document.cookie=`${name}=${encodeURIComponent(value)};expires=${d.toUTCString()};path=/`;
+  }
+  function getCookie(name){
+    const cookies=document.cookie.split("; ");
+    for(const c of cookies){
+      const [k,v]=c.split("=");
+      if(k===name) return decodeURIComponent(v);
+    }
+    return null;
+  }
+
+  function updateRanking(){
+    const nick=document.getElementById("nickname").value||"名無し";
+    state.nickname=nick;
+    const key="ranking_"+state.mode;
+    let ranking=JSON.parse(getCookie(key)||"[]");
+    // 既存更新
+    const existing=ranking.find(r=>r.nick===nick);
+    if(existing){
+      existing.score=state.correct;
+    }else{
+      ranking.push({nick:nick,score:state.correct});
+    }
+    // ソート＆上位5
+    ranking.sort((a,b)=>b.score-a.score);
+    ranking=ranking.slice(0,5);
+    setCookie(key,JSON.stringify(ranking),365);
+    showRanking(ranking);
+  }
+
+  function showRanking(ranking){
+    let html="<table><tr><th>順位</th><th>ニックネーム</th><th>正解数</th></tr>";
+    ranking.forEach((r,i)=>{
+      html+=`<tr><td>${i+1}</td><td>${r.nick}</td><td>${r.score}</td></tr>`;
+    });
+    html+="</table>";
+    rankingEl.innerHTML=html;
+  }
+
+  // 初期化
+  document.getElementById("newProblem").addEventListener("click",newProblem);
+  document.getElementById("submit").addEventListener("click",checkAnswer);
+  digitsEl.addEventListener("change",()=>{newProblem();loadRanking();});
+  function loadRanking(){
+    const key="ranking_"+digitsEl.value;
+    const ranking=JSON.parse(getCookie(key)||"[]");
+    showRanking(ranking);
+  }
+  newProblem();
+  loadRanking();
+</script>
+</body>
+</html>
