@@ -15,6 +15,7 @@
     th, td { border:1px solid #555; padding:6px; }
     th { background:#333; }
     footer { margin-top:20px; font-size:12px; color:#aaa; }
+    .left { text-align:left; }
   </style>
 </head>
 <body>
@@ -50,6 +51,11 @@
   <div class="panel">
     <h2>ランキング（モード別／最高ストリーク）</h2>
     <div id="ranking"></div>
+
+    <!-- ✅ リセットボタン追加 -->
+    <div class="left">
+      <button id="resetBtn">リセット（パスワード必須）</button>
+    </div>
   </div>
 
   <footer>
@@ -74,6 +80,7 @@
   const maxStreakQEl=document.getElementById("maxStreakQ");
   const rankingEl=document.getElementById("ranking");
   const actionBtn=document.getElementById("actionBtn");
+  const resetBtn=document.getElementById("resetBtn");
 
   let awaitingAnswer=true;
 
@@ -108,22 +115,25 @@
     const correct=state.a*state.b;
     state.total++;
     totalQEl.textContent=state.total;
+
     if(user===correct){
       state.correct++;
       state.stats[state.mode].streak++;
-      if(state.stats[state.mode].streak>state.stats[state.mode].maxStreak){
-        state.stats[state.mode].maxStreak=state.stats[state.mode].streak;
+      if(state.stats[state.mode].streak > state.stats[state.mode].maxStreak){
+        state.stats[state.mode].maxStreak = state.stats[state.mode].streak;
       }
       feedbackEl.textContent="正解！";
       feedbackEl.className="feedback ok";
     }else{
-      state.stats[state.mode].streak=0;
+      state.stats[state.mode].streak = 0;
       feedbackEl.textContent=`不正解… 正解は ${correct}`;
       feedbackEl.className="feedback ng";
     }
+
     correctQEl.textContent=state.correct;
     updateStatsDisplay();
     updateRanking();
+
     awaitingAnswer=false;
     actionBtn.textContent="次の問題";
   }
@@ -148,22 +158,30 @@
     return null;
   }
 
+  function deleteCookie(name){
+    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+  }
+
   function updateRanking(){
     const nick=document.getElementById("nickname").value||"名無し";
     state.nickname=nick;
     const key="ranking_"+state.mode;
     let ranking=JSON.parse(getCookie(key)||"[]");
-    const existing=ranking.find(r=>r.nick===nick);
+
     const score=state.stats[state.mode].maxStreak;
+    const existing=ranking.find(r=>r.nick===nick);
+
     if(existing){
-      if(score>existing.score){
-        existing.score=score;
+      if(score > existing.score){
+        existing.score = score;
       }
     }else{
       ranking.push({nick:nick,score:score});
     }
+
     ranking.sort((a,b)=>b.score-a.score);
     ranking=ranking.slice(0,5);
+
     setCookie(key,JSON.stringify(ranking),365);
     showRanking(ranking);
   }
@@ -177,7 +195,7 @@
     rankingEl.innerHTML=html;
   }
 
-  // ボタン統一
+  // ✅ ボタン統一
   actionBtn.addEventListener("click",()=>{
     if(awaitingAnswer){
       checkAnswer();
@@ -186,7 +204,9 @@
     }
   });
 
+  // ✅ モード変更時
   digitsEl.addEventListener("change",()=>{newProblem();loadRanking();});
+
   function loadRanking(){
     const key="ranking_"+digitsEl.value;
     const ranking=JSON.parse(getCookie(key)||"[]");
@@ -194,6 +214,21 @@
     ensureStats(digitsEl.value);
     updateStatsDisplay();
   }
+
+  // ✅ リセット機能（回答欄に 4096 が必要）
+  resetBtn.addEventListener("click",()=>{
+    if(answerEl.value !== "4096"){
+      alert("パスワードが違います");
+      return;
+    }
+
+    const key="ranking_"+state.mode;
+    deleteCookie(key);
+
+    alert("このモードのランキングをリセットしました");
+
+    loadRanking();
+  });
 
   newProblem();
   loadRanking();
