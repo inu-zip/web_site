@@ -48,7 +48,7 @@
   </div>
 
   <div class="panel">
-    <h2>ランキング（モード別）</h2>
+    <h2>ランキング（モード別／連続正解数）</h2>
     <div id="ranking"></div>
   </div>
 
@@ -131,9 +131,9 @@
     // 既存更新
     const existing=ranking.find(r=>r.nick===nick);
     if(existing){
-      existing.score=state.correct;
+      existing.score=state.streak; // ★連続正解数を保存
     }else{
-      ranking.push({nick:nick,score:state.correct});
+      ranking.push({nick:nick,score:state.streak});
     }
     // ソート＆上位5
     ranking.sort((a,b)=>b.score-a.score);
@@ -143,7 +143,7 @@
   }
 
   function showRanking(ranking){
-    let html="<table><tr><th>順位</th><th>ニックネーム</th><th>正解数</th></tr>";
+    let html="<table><tr><th>順位</th><th>ニックネーム</th><th>連続正解数</th></tr>";
     ranking.forEach((r,i)=>{
       html+=`<tr><td>${i+1}</td><td>${r.nick}</td><td>${r.score}</td></tr>`;
     });
