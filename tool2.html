@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="utf-8" />
-    <title>Prozemiproj JSON 編集ツール</title>
+    <title>scratch 編集ツール</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <style>
         body {
@@ -41,13 +41,13 @@
 </head>
 <body>
     <header>
-        <h1>プロゼミ project.json 編集</h1>
-        <p>prozemiproj（ZIP）を読み込んで、project.json を編集して再圧縮します。</p>
+        <h1>scratch 編集</h1>
+        <p>sb3（ZIP）を読み込んで、project.json を編集して再圧縮します。</p>
     </header>
 
     <div class="row">
         <label for="fileInput"><strong>ファイル選択:</strong></label>
-        <input id="fileInput" type="file" accept=".prozemiproj,.zip" />
+        <input id="fileInput" type="file" accept=".sb3,.zip" />
     </div>
 
     <div class="row">
@@ -186,9 +186,9 @@
                     compressionOptions: { level: 6 }
                 });
 
-                const original = fileInput.files?.[0]?.name || 'project.prozemiproj';
-                const outName = original.replace(/\.prozemiproj$/i, '')
-                                        .replace(/\.zip$/i, '') + '_edited.prozemiproj';
+                const original = fileInput.files?.[0]?.name || 'project.sb3';
+                const outName = original.replace(/\.sb3$/i, '')
+                                        .replace(/\.zip$/i, '') + '_edited.sb3';
 
                 downloadBlob(blob, outName);
                 statusEl.textContent = '保存完了：ダウンロードが開始されました。';
