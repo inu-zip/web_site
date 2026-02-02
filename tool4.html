@@ -2,12 +2,100 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<title>横スクロールゲームメーカー</title>
+<style>
+  body {
+    margin: 0;
+    font-family: sans-serif;
+    display: flex;
+    height: 100vh;
+  }
+  #left, #right {
+    padding: 10px;
+    box-sizing: border-box;
+  }
+  #left {
+    width: 40%;
+    border-right: 1px solid #ccc;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  #right {
+    width: 60%;
+    display: flex;
+    flex-direction: column;
+  }
+  textarea {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    font-family: monospace;
+  }
+  #preview {
+    flex: 1;
+    border: none;
+    width: 100%;
+  }
+  button {
+    padding: 8px 16px;
+    margin-right: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div id="left">
+  <h2>ステージデータ（JSON）</h2>
+  <p>値を変えて「プレビュー更新」→「HTMLを書き出す」でゲームHTMLを生成できます。</p>
+  <textarea id="stageInput"></textarea>
+  <div>
+    <button id="updatePreview">プレビュー更新</button>
+    <button id="exportHtml">HTMLを書き出す</button>
+  </div>
+</div>
+
+<div id="right">
+  <h2>プレビュー</h2>
+  <iframe id="preview"></iframe>
+</div>
+
+<script>
+// デフォルトのステージデータ
+const defaultStage = {
+  "player": { "x": 50, "y": 0, "w": 30, "h": 40, "vx": 0, "vy": 0 },
+  "goal": { "x": 1800, "y": 300, "w": 40, "h": 40 },
+  "blocks": [
+    { "x": 0, "y": 350, "w": 800, "h": 50 },
+    { "x": 800, "y": 350, "w": 800, "h": 50 }
+  ],
+  "spikes": [
+    { "x": 600, "y": 330, "w": 40, "h": 20 }
+  ],
+  "enemies": [
+    { "x": 900, "y": 310, "w": 40, "h": 40, "dir": 1, "range": 100, "startX": 900 }
+  ]
+};
+
+const stageInput = document.getElementById("stageInput");
+const preview = document.getElementById("preview");
+stageInput.value = JSON.stringify(defaultStage, null, 2);
+
+// ゲームHTMLを生成する関数（フッター付き）
+function generateGameHtml(stageObj) {
+  const stageJson = JSON.stringify(stageObj);
+  return `
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
 <title>横スクロールアクション</title>
 <style>
   body {
     margin: 0;
     overflow: hidden;
     background: #87ceeb;
+    font-family: sans-serif;
   }
   #game {
     background: #87ceeb;
@@ -15,11 +103,12 @@
   }
   #controller {
     position: fixed;
-    bottom: 10px;
+    bottom: 40px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     gap: 20px;
+    z-index: 10;
   }
   #controller button {
     width: 60px;
@@ -29,49 +118,39 @@
     border: none;
     background: #fff;
   }
+  footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    font-size: 12px;
+    text-align: center;
+    background: rgba(255,255,255,0.8);
+    padding: 4px 0;
+  }
 </style>
 </head>
 <body>
 
 <canvas id="game" width="800" height="400"></canvas>
 
-<!-- コントローラー -->
 <div id="controller">
   <button id="left">←</button>
   <button id="right">→</button>
   <button id="jump">A</button>
 </div>
 
+<footer>これは教育用のプログラミングサンプルです。</footer>
+
 <script>
-// ===============================
-// 基本設定
-// ===============================
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-
 let keys = { left: false, right: false, jump: false };
 
-// ===============================
 // ステージデータ
-// ===============================
-const stage = {
-  player: { x: 50, y: 0, w: 30, h: 40, vx: 0, vy: 0 },
-  goal: { x: 1800, y: 300, w: 40, h: 40 },
-  blocks: [
-    { x: 0, y: 350, w: 800, h: 50 },
-    { x: 800, y: 350, w: 800, h: 50 }
-  ],
-  spikes: [
-    { x: 600, y: 330, w: 40, h: 20 }
-  ],
-  enemies: [
-    { x: 900, y: 310, w: 40, h: 40, dir: 1, range: 100, startX: 900 }
-  ]
-};
-
+const stage = ${stageJson};
 let cameraX = 0;
 
-// ===============================
 // 入力（PC）
 document.addEventListener("keydown", e => {
   if (e.key === "ArrowLeft") keys.left = true;
@@ -92,7 +171,14 @@ document.getElementById("right").onmouseup = () => keys.right = false;
 document.getElementById("jump").onmousedown = () => keys.jump = true;
 document.getElementById("jump").onmouseup = () => keys.jump = false;
 
-// ===============================
+// タッチ対応（スマホ長押し用）
+document.getElementById("left").ontouchstart = e => { e.preventDefault(); keys.left = true; };
+document.getElementById("left").ontouchend = e => { e.preventDefault(); keys.left = false; };
+document.getElementById("right").ontouchstart = e => { e.preventDefault(); keys.right = true; };
+document.getElementById("right").ontouchend = e => { e.preventDefault(); keys.right = false; };
+document.getElementById("jump").ontouchstart = e => { e.preventDefault(); keys.jump = true; };
+document.getElementById("jump").ontouchend = e => { e.preventDefault(); keys.jump = false; };
+
 // 当たり判定
 function hit(a, b) {
   return (
@@ -103,30 +189,22 @@ function hit(a, b) {
   );
 }
 
-// ===============================
-// メインループ
 function update() {
   const p = stage.player;
 
-  // 横移動
   if (keys.left) p.vx = -3;
   else if (keys.right) p.vx = 3;
   else p.vx = 0;
 
-  // ジャンプ
   if (keys.jump && p.onGround) {
     p.vy = -10;
     p.onGround = false;
   }
 
-  // 重力
   p.vy += 0.5;
-
-  // 移動
   p.x += p.vx;
   p.y += p.vy;
 
-  // 地面・ブロックとの当たり判定
   p.onGround = false;
   for (const b of stage.blocks) {
     if (hit(p, b)) {
@@ -138,7 +216,6 @@ function update() {
     }
   }
 
-  // 敵の移動
   for (const e of stage.enemies) {
     e.x += e.dir * 2;
     if (e.x > e.startX + e.range) e.dir = -1;
@@ -150,7 +227,6 @@ function update() {
     }
   }
 
-  // トゲ
   for (const s of stage.spikes) {
     if (hit(p, s)) {
       alert("ゲームオーバー");
@@ -158,56 +234,82 @@ function update() {
     }
   }
 
-  // ゴール
   if (hit(p, stage.goal)) {
     alert("クリア！");
     location.reload();
   }
 
-  // カメラ追従
   cameraX = p.x - 200;
 
   draw();
   requestAnimationFrame(update);
 }
 
-// ===============================
-// 描画
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
   const offset = cameraX;
 
-  // ブロック
   ctx.fillStyle = "#654321";
   for (const b of stage.blocks) {
     ctx.fillRect(b.x - offset, b.y, b.w, b.h);
   }
 
-  // トゲ
   ctx.fillStyle = "red";
   for (const s of stage.spikes) {
     ctx.fillRect(s.x - offset, s.y, s.w, s.h);
   }
 
-  // 敵
   ctx.fillStyle = "purple";
   for (const e of stage.enemies) {
     ctx.fillRect(e.x - offset, e.y, e.w, e.h);
   }
 
-  // ゴール
   ctx.fillStyle = "yellow";
   ctx.fillRect(stage.goal.x - offset, stage.goal.y, stage.goal.w, stage.goal.h);
 
-  // プレイヤー
   const p = stage.player;
   ctx.fillStyle = "blue";
   ctx.fillRect(p.x - offset, p.y, p.w, p.h);
 }
 
-// ===============================
 update();
+<\/script>
+
+</body>
+</html>
+`;
+}
+
+// プレビュー更新
+document.getElementById("updatePreview").addEventListener("click", () => {
+  try {
+    const obj = JSON.parse(stageInput.value);
+    const html = generateGameHtml(obj);
+    preview.srcdoc = html;
+  } catch (e) {
+    alert("JSONの形式が正しくありません: " + e.message);
+  }
+});
+
+// HTML書き出し
+document.getElementById("exportHtml").addEventListener("click", () => {
+  try {
+    const obj = JSON.parse(stageInput.value);
+    const html = generateGameHtml(obj);
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "game.html";
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert("JSONの形式が正しくありません: " + e.message);
+  }
+});
+
+// 初回プレビュー
+document.getElementById("updatePreview").click();
 </script>
 
 </body>
