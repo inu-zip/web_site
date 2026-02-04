@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>画像の配列化ツール</title>
+  <title>画像 → カラータグ配列</title>
   <style>
     body { font-family: sans-serif; padding: 16px; }
     canvas { border: 1px solid #ccc; display: block; margin-top: 8px; }
@@ -11,7 +11,7 @@
   </style>
 </head>
 <body>
-  <h1>画像 → 1次元配列（RGBA）</h1>
+  <h1>画像 → [@color:xxxxxx] 配列</h1>
 
   <label>
     画像ファイル:
@@ -32,7 +32,7 @@
 
   <canvas id="canvas" width="128" height="128"></canvas>
 
-  <h2>一次元配列（Uint8 RGBA）</h2>
+  <h2>出力配列</h2>
   <textarea id="output" readonly></textarea>
 
   <script>
@@ -54,7 +54,7 @@
       const img = new Image();
       img.onload = () => {
         loadedImage = img;
-        // とりあえず元画像サイズを入力欄に反映
+
         widthInput.value  = img.width;
         heightInput.value = img.height;
 
@@ -62,9 +62,6 @@
         canvas.height = img.height;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, img.width, img.height);
-      };
-      img.onerror = () => {
-        alert('画像の読み込みに失敗しました');
       };
       img.src = URL.createObjectURL(file);
     });
@@ -78,32 +75,31 @@
 
       const w = parseInt(widthInput.value, 10);
       const h = parseInt(heightInput.value, 10);
-      if (!w || !h || w <= 0 || h <= 0) {
-        alert('幅・高さには1以上の数値を入力してください');
-        return;
-      }
 
-      // キャンバスを指定サイズに変更してリサイズ描画
       canvas.width  = w;
       canvas.height = h;
       ctx.clearRect(0, 0, w, h);
       ctx.drawImage(loadedImage, 0, 0, w, h);
 
-      // ピクセルデータ取得（RGBA の一次元配列）
       const imageData = ctx.getImageData(0, 0, w, h);
-      const data = imageData.data; // Uint8ClampedArray
+      const data = imageData.data;
 
-      // 表示用に通常の配列に変換（そのままでもいいけど見やすさ優先）
-      const arr = Array.from(data);
+      const arr = [];
 
-      // 例: JS の配列リテラル形式で出力
-      output.value = `// width=${w}, height=${h}, length=${arr.length} (RGBA)\n` +
-                     `const pixels = [\n  ` +
-                     arr.map((v, i) => {
-                       const sep = (i % 16 === 15) ? ',\n  ' : ', ';
-                       return v + sep;
-                     }).join('').replace(/,\s*$/, '') +
-                     `\n];`;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+
+        const hex =
+          r.toString(16).padStart(2, "0") +
+          g.toString(16).padStart(2, "0") +
+          b.toString(16).padStart(2, "0");
+
+        arr.push(`@color:${hex}`);
+      }
+
+      output.value = JSON.stringify(arr, null, 2);
     });
   </script>
 </body>
