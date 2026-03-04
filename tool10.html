@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>HTML Editor + Preview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- JSZip CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 8px 12px;
+      background: #111827;
+      color: #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 14px;
+    }
+    header .title {
+      font-weight: 600;
+    }
+    header .actions {
+      display: flex;
+      gap: 8px;
+    }
+    button {
+      border: none;
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      background: #2563eb;
+      color: #f9fafb;
+    }
+    button.secondary {
+      background: #374151;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    main {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+    .pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .pane-header {
+      padding: 6px 10px;
+      font-size: 12px;
+      background: #f3f4f6;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .pane-header span {
+      font-weight: 600;
+      color: #374151;
+    }
+    textarea {
+      flex: 1;
+      width: 100%;
+      border: none;
+      padding: 10px;
+      font-family: "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+      resize: none;
+      outline: none;
+      border-right: 1px solid #e5e7eb;
+    }
+    iframe {
+      flex: 1;
+      width: 100%;
+      border: none;
+      background: white;
+    }
+    footer {
+      padding: 6px 10px;
+      font-size: 11px;
+      background: #f9fafb;
+      border-top: 1px solid #e5e7eb;
+      color: #6b7280;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    @media (max-width: 800px) {
+      main {
+        flex-direction: column;
+      }
+      textarea {
+        border-right: none;
+        border-bottom: 1px solid #e5e7eb;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">HTML Editor + Preview</div>
+    <div class="actions">
+      <button id="btn-reset" class="secondary" title="初期テンプレートに戻す">Reset</button>
+      <button id="btn-download" title="現在のHTMLをindex.htmlとしてZIPダウンロード">Download ZIP</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="pane">
+      <div class="pane-header">
+        <span>Editor</span>
+        <small id="status">Saved</small>
+      </div>
+      <textarea id="editor"></textarea>
+    </section>
+    <section class="pane">
+      <div class="pane-header">
+        <span>Preview</span>
+        <small>Live</small>
+      </div>
+      <iframe id="preview"></iframe>
+    </section>
+  </main>
+
+  <footer>
+    <span>GitHub Pages でそのまま動作します。</span>
+    <span>自動プレビュー / LocalStorage 保存 / ZIP ダウンロード</span>
+  </footer>
+
+  <script>
+    const editor = document.getElementById("editor");
+    const preview = document.getElementById("preview");
+    const statusEl = document.getElementById("status");
+    const btnReset = document.getElementById("btn-reset");
+    const btnDownload = document.getElementById("btn-download");
+
+    const STORAGE_KEY = "html-editor-content-v1";
+
+    const defaultTemplate = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>My Page</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 40px;
+      background: #f9fafb;
+      color: #111827;
+    }
+    h1 {
+      color: #2563eb;
+    }
+    .card {
+      padding: 16px;
+      border-radius: 8px;
+      background: white;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <h1>Hello GitHub Pages 👋</h1>
+  <div class="card">
+    <p>ここに自由にHTMLを書いてください。</p>
+    <ul>
+      <li>左で編集</li>
+      <li>右でプレビュー</li>
+      <li>ZIPダウンロードして配布もOK</li>
+    </ul>
+  </div>
+</body>
+</html>`;
+
+    function loadInitial() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      editor.value = saved || defaultTemplate;
+      updatePreview();
+      statusEl.textContent = saved ? "Loaded from LocalStorage" : "Default template";
+      setTimeout(() => (statusEl.textContent = "Saved"), 800);
+    }
+
+    function updatePreview() {
+      const doc = preview.contentDocument || preview.contentWindow.document;
+      doc.open();
+      doc.write(editor.value);
+      doc.close();
+    }
+
+    let saveTimer = null;
+    editor.addEventListener("input", () => {
+      updatePreview();
+      statusEl.textContent = "Editing...";
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        localStorage.setItem(STORAGE_KEY, editor.value);
+        statusEl.textContent = "Saved";
+      }, 400);
+    });
+
+    btnReset.addEventListener("click", () => {
+      if (!confirm("初期テンプレートに戻しますか？（現在の内容はLocalStorageからも消えます）")) return;
+      editor.value = defaultTemplate;
+      localStorage.removeItem(STORAGE_KEY);
+      updatePreview();
+      statusEl.textContent = "Reset to default";
+      setTimeout(() => (statusEl.textContent = "Saved"), 800);
+    });
+
+    btnDownload.addEventListener("click", async () => {
+      btnDownload.disabled = true;
+      btnDownload.textContent = "Creating ZIP...";
+      try {
+        const zip = new JSZip();
+        zip.file("index.html", editor.value);
+        const blob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "html-site.zip";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert("ZIP作成中にエラーが発生しました: " + e.message);
+      } finally {
+        btnDownload.disabled = false;
+        btnDownload.textContent = "Download ZIP";
+      }
+    });
+
+    loadInitial();
+  </script>
+</body>
+</html>
