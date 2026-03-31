@@ -2,30 +2,38 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Video Page</title>
-
-<style>
-body{
-  margin:0;
-  background:black;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  height:100vh;
-}
-
-video{
-  max-width:100%;
-  max-height:100%;
-}
-</style>
-
+<title>Video Playlist Loop</title>
 </head>
 <body>
 
-<video controls autoplay loop>
-  <source src="videoplayback.mp4" type="video/mp4">
-</video>
+<video id="videoPlayer" width="640" height="360" autoplay muted playsinline></video>
+
+<script>
+const videos = [
+  "video1.mp4",
+  "video2.mp4",
+  "video3.mp4"
+];
+
+let index = 0;
+const player = document.getElementById("videoPlayer");
+
+function playVideo(i) {
+  player.src = videos[i];
+  player.play();
+}
+
+player.addEventListener("ended", () => {
+  index++;
+  if (index >= videos.length) {
+    index = 0; // 最初に戻る
+  }
+  playVideo(index);
+});
+
+// 最初の動画を再生
+playVideo(index);
+</script>
 
 </body>
 </html>
