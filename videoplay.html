@@ -37,6 +37,27 @@ const videos = [
 let index = 0;
 const player = document.getElementById("videoPlayer");
 
+function playVideo(){
+  player.src = videos[index];
+  player.load();
+  player.play();
+}
+
+player.addEventListener("ended", () => {
+  index = (index + 1) % videos.length;
+  playVideo();
+});
+
+document.getElementById("startBtn").onclick = () => {
+  playVideo();
+  document.getElementById("startBtn").style.display="none";
+};
+</script>
+
+</body>
+</html>let index = 0;
+const player = document.getElementById("videoPlayer");
+
 function playVideo(i){
   player.src = videos[i];
   player.play();
