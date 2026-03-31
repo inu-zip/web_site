@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>Video Playlist Loop</title>
+<title>Video Loop</title>
 </head>
 <body>
 
-<video id="videoPlayer" width="640" height="360" autoplay playsinline></video>
+<video id="videoPlayer" width="640" height="360" autoplay muted></video>
 
 <script>
 const videos = [
@@ -26,14 +26,16 @@ function playVideo(i) {
 player.addEventListener("ended", () => {
   index++;
   if (index >= videos.length) {
-    index = 0; // 最初に戻る
+    index = 0; // ループ
   }
   playVideo(index);
 });
 
-// 最初の動画を再生
+// 最初の動画
 playVideo(index);
 </script>
 
+</body>
+</html>
 </body>
 </html>
