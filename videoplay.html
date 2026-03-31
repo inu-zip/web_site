@@ -1,12 +1,31 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Video Loop</title>
+<title>Background Video Playlist</title>
+
+<style>
+body{
+  margin:0;
+  overflow:hidden;
+}
+
+video{
+  position:fixed;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  z-index:-1;
+}
+</style>
 </head>
 <body>
 
-<video id="videoPlayer" width="640" height="360" autoplay muted></video>
+<button id="startBtn">再生</button>
+
+<video id="videoPlayer" playsinline></video>
 
 <script>
 const videos = [
@@ -18,23 +37,26 @@ const videos = [
 let index = 0;
 const player = document.getElementById("videoPlayer");
 
-function playVideo(i) {
+function playVideo(i){
   player.src = videos[i];
   player.play();
 }
 
-player.addEventListener("ended", () => {
+player.addEventListener("ended", ()=>{
   index++;
-  if (index >= videos.length) {
-    index = 0; // ループ
-  }
+  if(index >= videos.length) index = 0;
   playVideo(index);
 });
 
-// 最初の動画
-playVideo(index);
+document.getElementById("startBtn").onclick = () => {
+  player.muted = false;
+  playVideo(index);
+  document.getElementById("startBtn").style.display="none";
+};
 </script>
 
+</body>
+</html>
 </body>
 </html>
 </body>
