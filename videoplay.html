@@ -2,12 +2,11 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Background Video Playlist</title>
+<title>Video Playlist Loop</title>
 
 <style>
 body{
   margin:0;
-  overflow:hidden;
 }
 
 video{
@@ -20,6 +19,7 @@ video{
   z-index:-1;
 }
 </style>
+
 </head>
 <body>
 
@@ -28,6 +28,7 @@ video{
 <video id="videoPlayer" playsinline></video>
 
 <script>
+
 const videos = [
   "video1.mp4",
   "video2.mp4",
@@ -39,46 +40,24 @@ const player = document.getElementById("videoPlayer");
 
 function playVideo(){
   player.src = videos[index];
-  player.load();
   player.play();
 }
 
-player.addEventListener("ended", () => {
-  index = (index + 1) % videos.length;
-  playVideo();
+player.addEventListener("timeupdate", () => {
+
+  if(player.duration && player.currentTime >= player.duration - 0.2){
+    index = (index + 1) % videos.length;
+    playVideo();
+  }
+
 });
 
 document.getElementById("startBtn").onclick = () => {
   playVideo();
   document.getElementById("startBtn").style.display="none";
 };
+
 </script>
 
-</body>
-</html>let index = 0;
-const player = document.getElementById("videoPlayer");
-
-function playVideo(i){
-  player.src = videos[i];
-  player.play();
-}
-
-player.addEventListener("ended", ()=>{
-  index++;
-  if(index >= videos.length) index = 0;
-  playVideo(index);
-});
-
-document.getElementById("startBtn").onclick = () => {
-  player.muted = false;
-  playVideo(index);
-  document.getElementById("startBtn").style.display="none";
-};
-</script>
-
-</body>
-</html>
-</body>
-</html>
 </body>
 </html>
