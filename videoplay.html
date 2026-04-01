@@ -1,31 +1,12 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>Video Playlist Loop</title>
-
-<style>
-body{
-  margin:0;
-}
-
-video{
-  position:fixed;
-  top:0;
-  left:0;
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  z-index:-1;
-}
-</style>
-
 </head>
 <body>
 
-<button id="startBtn">再生</button>
-
 <video id="videoPlayer" playsinline></video>
+<button id="startBtn">再生</button>
 
 <script>
 
@@ -35,6 +16,28 @@ const videos = [
   "video3.mp4"
 ];
 
+let index = 0;
+const player = document.getElementById("videoPlayer");
+
+function playVideo(i){
+  player.src = videos[i];
+  player.play();
+}
+
+player.addEventListener("ended", () => {
+  index++;
+  if(index >= videos.length) index = 0;
+  playVideo(index);
+});
+
+document.getElementById("startBtn").onclick = () => {
+  playVideo(index);
+};
+
+</script>
+
+</body>
+</html>
 let index = 0;
 const player = document.getElementById("videoPlayer");
 
