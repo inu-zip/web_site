@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHA-256 Identicon Generator</title>
+    <style>
+        :root {
+            --bg-color: #f6f8fa;
+            --text-color: #24292f;
+            --accent-color: #0969da;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 3px 6px rgba(140, 149, 159, 0.15);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        h1 {
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            color: var(--text-color);
+        }
+
+        input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 1.5rem;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.3);
+        }
+
+        canvas {
+            border: 1px solid #eaecef;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.1s ease;
+        }
+
+        canvas:active {
+            transform: scale(0.98);
+        }
+
+        .hash-display {
+            margin-top: 1rem;
+            font-family: monospace;
+            font-size: 12px;
+            color: #656d76;
+            word-break: break-all;
+        }
+        
+        .hint {
+            font-size: 0.8rem;
+            color: #656d76;
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>SHA-256 Identicon</h1>
+    <input type="text" id="usernameInput" placeholder="ユーザー名や文字列を入力..." value="Hello World">
+    
+    <!-- 5x5 grid rendered on a larger canvas for crisp pixels -->
+    <canvas id="identiconCanvas" width="250" height="250"></canvas>
+    
+    <div class="hash-display" id="hashDisplay">Hash: ...</div>
+    <div class="hint">画像をクリックでダウンロード</div>
+</div>
+
+<script>
+    const input = document.getElementById('usernameInput');
+    const canvas = document.getElementById('identiconCanvas');
+    const ctx = canvas.getContext('2d');
+    const hashDisplay = document.getElementById('hashDisplay');
+
+    // SHA-256 ハッシュを計算してHex文字列として返す
+    async function getSHA256(text) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Hash値から色とパターンを決定して描画
+    function drawIdenticon(hash) {
+        const gridSize = 5;
+        const pixelSize = canvas.width / gridSize; // 50px per block
+        
+        // ハッシュの最初の6桁からベースカラーを決定 (RGB)
+        const r = parseInt(hash.substring(0, 2), 16);
+        const g = parseInt(hash.substring(2, 4), 16);
+        const b = parseInt(hash.substring(4, 6), 16);
+        const fillColor = `rgb(${r}, ${g}, ${b})`;
+        const bgColor = '#f0f0f0';
+
+        // キャンバスをクリア
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 5x5グリッドの左半分(3列)のパターンをハッシュから決定
+        // GitHubのIdenticonは左右対称なので、左側のビットだけで全体を制御できる
+        const patternBits = [];
+        for (let i = 6; i < hash.length; i += 2) {
+            const byte = parseInt(hash[i], 16); 
+            // 各バイトの下位4ビットを使用して4つのセルの状態を決める
+            patternBits.push((byte & 8) > 0);
+            patternBits.push((byte & 4) > 0);
+            patternBits.push((byte & 2) > 0);
+            patternBits.push((byte & 1) > 0);
+            if (patternBits.length >= 15) break; // 5行 x 3列 = 15ビット必要
+        }
+
+        // グリッドを描画
+        for (let y = 0; y < gridSize; y++) {
+            for (let x = 0; x < Math.ceil(gridSize / 2); x++) {
+                // 左側3列分のビットを取得
+                const bitIndex = y * 3 + x;
+                const isActive = patternBits[bitIndex];
+
+                const color = isActive ? fillColor : bgColor;
+                
+                // 左側のセルを描画
+                ctx.fillStyle = color;
+                ctx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
+
+                // 右側のセルを描画 (ミラーリング)
+                ctx.fillRect((gridSize - 1 - x) * pixelSize, y * pixelSize, pixelSize, pixelSize);
+            }
+        }
+
+        // ハッシュ表示を更新
+        hashDisplay.textContent = `Hash: ${hash}`;
+    }
+
+    // 入力変更時の処理
+    async function update() {
+        const text = input.value || 'default';
+        const hash = await getSHA256(text);
+        drawIdenticon(hash);
+    }
+
+    // ダウンロード機能
+    canvas.addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.download = `identicon-${input.value || 'default'}.png`;
+        link.href = canvas.toDataURL();
+        link.click();
+    });
+
+    // イベントリスナー設定
+    input.addEventListener('input', update);
+
+    // 初期描画
+    update();
+</script>
+
+</body>
+</html>
