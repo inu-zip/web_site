@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AtCoder レート統計ツール</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1c2330;--sub:#667085;--bd:#dde1e8;--ac:#2563eb;--ok:#15803d;--ng:#b45309;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12151b;--card:#1b2029;--fg:#e6e9ef;--sub:#98a2b3;--bd:#2e3542;--ac:#6ea0ff;--ok:#4ade80;--ng:#fbbf24}}
+:root[data-theme="dark"]{--bg:#12151b;--card:#1b2029;--fg:#e6e9ef;--sub:#98a2b3;--bd:#2e3542;--ac:#6ea0ff;--ok:#4ade80;--ng:#fbbf24}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;line-height:1.6}
+main{max-width:760px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:1.3rem;margin:0 0 4px}
+.sub{color:var(--sub);font-size:.85rem;margin:0 0 16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:16px}
+label{font-size:.85rem;color:var(--sub);display:block;margin-bottom:6px}
+textarea,input{width:100%;box-sizing:border-box;background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:10px;font:inherit;font-size:.9rem}
+textarea{min-height:110px;font-family:ui-monospace,Menlo,monospace}
+button{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:10px 18px;font:inherit;font-weight:600;cursor:pointer;margin-top:10px}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tabs button{background:var(--bg);color:var(--fg);border:1px solid var(--bd);margin:0;font-weight:500}
+.tabs button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.stat{display:flex;gap:24px;flex-wrap:wrap}
+.stat div span{display:block;font-size:.75rem;color:var(--sub)}
+.stat div b{font-size:1.5rem}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.95rem}
+th,td{padding:8px 6px;border-bottom:1px solid var(--bd);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--sub);font-weight:500;font-size:.8rem}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.ok{color:var(--ok)}.ng{color:var(--ng)}
+.note{font-size:.78rem;color:var(--sub)}
+.err{color:#dc2626;font-size:.85rem;margin-top:8px}
+code{background:var(--bg);padding:1px 5px;border-radius:4px;font-size:.8rem}
+</style>
+</head>
+<body>
+<main>
+<h1>AtCoder レート統計ツール</h1>
+<p class="sub">パフォーマンス履歴から、統計・レート推移・変動マップ・必要パフォーマンス・確率予測をまとめて確認できます。</p>
+
+<div class="card">
+  <div class="tabs">
+    <button id="t1" class="on" type="button">履歴JSONを貼る</button>
+    <button id="t2" type="button">パフォーマンスを直接入力</button>
+  </div>
+  <div id="p1">
+    <label>ブラウザで <code>https://atcoder.jp/users/ユーザー名/history/json</code> を開き、表示された内容を全文コピーして貼り付け（Rated参加のInnerPerformanceを使用）</label>
+    <textarea id="json" placeholder='[{"IsRated":true,"InnerPerformance":1234,...}]'></textarea>
+  </div>
+  <div id="p2" hidden>
+    <label>Rated参加のパフォーマンスを古い順に、カンマ・空白・改行区切りで入力</label>
+    <textarea id="manual" placeholder="800, 1000, 1200, 950"></textarea>
+  </div>
+  <button id="go" type="button">計算する</button>
+  <div class="err" id="err"></div>
+</div>
+
+<div id="res" hidden>
+  <div class="card">
+    <div class="stat">
+      <div><span>参加回数（Rated）</span><b id="n">-</b></div>
+      <div><span>現在のレート</span><b id="cur">-</b></div>
+      <div><span>最高レート</span><b id='maxr'>-</b></div>
+      <div><span>最高perf</span><b id='maxp'>-</b></div>
+      <div><span>平均perf</span><b id='avgp'>-</b></div>
+      <div><span>標準偏差</span><b id='sdp'>-</b></div>
+      <div><span>直近5回平均</span><b id='rec5'>-</b></div>
+      <div><span>レート上昇率</span><b id='up'>-</b></div>
+    </div>
+  </div>
+  <div class='card'>
+    <label>レート・パフォーマンス推移（線＝レート、点＝パフォーマンス）</label>
+    <div id='hist'></div>
+    <p class='note' id='histTip' style='margin-top:8px'>グラフ上をなぞると各回の値を表示します。</p>
+  </div>
+  <div class='card'>
+    <label>安定して出せるレート分析（下振れ・上振れを除外）</label>
+    <div class='stat'>
+      <div><span>安定レート</span><b id='stR'>-</b></div>
+      <div><span>現在との差</span><b id='stD'>-</b></div>
+      <div><span>安定perf</span><b id='stP'>-</b></div>
+      <div><span>通常レンジ（25〜75%）</span><b id='stRg' style='font-size:1.1rem'>-</b></div>
+      <div><span>下振れ／上振れ</span><b id='stO'>-</b></div>
+    </div>
+    <div style='margin:12px 0 8px;font-size:.85rem;color:var(--sub)'>外れ値の基準（IQR×）：<select id='stK' style='background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:6px'><option value='1'>1.0（厳しい）</option><option value='1.5' selected>1.5（標準）</option><option value='2'>2.0（緩い）</option></select></div>
+    <div id='stHist'></div>
+    <div class='tw' style='margin-top:8px'><table>
+      <thead><tr><th>手法</th><th>安定perf</th><th>現在レートとの差</th></tr></thead>
+      <tbody id='stRows'></tbody>
+    </table></div>
+    <p class='note' id='stList' style='margin-top:8px'></p>
+    <p class='note'>安定レート＝外れ値を除いた履歴で計算したレート。外れ値は四分位範囲（Q1−k×IQRより下、Q3+k×IQRより上）を外れた回です（参加回数が4回未満は除外なし）。安定perf＝中央値・10%トリム平均・外れ値除外平均の平均です。グラフの色は、青＝通常、橙＝下振れ、緑＝上振れです。</p>
+  </div>
+  <div class='card'>
+    <label>レート変動マップ</label>
+    <div class='tabs'><button id='m1' class='on' type='button'>レート増減</button><button id='m2' type='button'>変動後のレート</button></div>
+    <div id='map' class='tw'></div>
+    <div class='note' id='mapNote' style='margin-top:8px'>行＝毎回出すと仮定するパフォーマンス、列＝連続して出したコンテスト回数。太字の行は現在のレート付近です。
+    </div>
+  </div>
+  <div class="card">
+    <div class="tw"><table>
+      <thead><tr><th>目標レート</th><th>区分</th><th>必要パフォーマンス</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <p class="note">「維持」＝現在レートが目標以上で、次回そのレート以上を保つ最低パフォーマンス。「到達」＝次回で目標に届く最低パフォーマンス。</p>
+  </div>
+  <div class="card">
+    <label>目標レート（横軸 0〜3000）ごとの必要パフォーマンス（縦軸 0〜4500）</label>
+    <div id="chart"></div>
+    <p class="note" id="tip" style="margin-top:8px">グラフ上をなぞると値を表示します。破線は現在のレートです。</p>
+  </div>
+  <div class="card">
+    <label>過去のパフォーマンスの四分位でレートを予測</label>
+    <div class="tw"><table>
+      <thead><tr><th>四分位</th><th>パフォーマンス</th><th>次回レート</th><th>増減</th><th>10回後</th></tr></thead>
+      <tbody id="qrows"></tbody>
+    </table></div>
+    <div id="proj" style="margin-top:12px"></div>
+    <p class="note" style="margin-top:8px">Q1〜Q3は履歴の全パフォーマンスの25/50/75%点（線形補間）、Q4は最大値です。「10回後」と上の推移グラフは、今後ずっとそのパフォーマンスを取り続けた場合の予測です。</p>
+  </div>
+  <div class="card">
+    <label>モンテカルロ法による10回後のレートの確率予測（1,000パターン）</label>
+    <p id="mcStat" style="margin:0 0 8px;font-weight:600"></p>
+    <div class="tw"><table>
+      <thead><tr><th>目標レート</th><th>区分</th><th>10回後に達成</th><th>10回以内に一度でも</th></tr></thead>
+      <tbody id="mcRows"></tbody>
+    </table></div>
+    <button id="resim" type="button">再シミュレーション</button>
+    <p class="note" style="margin-top:8px">過去のパフォーマンスの平均と標本標準偏差から正規分布を仮定し、今後10回分をランダムに生成しています。「10回後に達成」は10回目の時点でレートが目標以上である確率（現在のレート以下の目標は「維持」）です。実際の成績は成長や注力度で変わるため、目安としてご覧ください。</p>
+  </div>
+  <div class="card">
+    <label>パフォーマンスを仮定して次回のレートを確認</label>
+    <input id="whatif" type="number" placeholder="例: 1500">
+    <p id="whatifOut" style="margin:8px 0 0;font-weight:600"></p>
+    <div id="reach" class="tw"></div>
+    <hr style="border:0;border-top:1px solid var(--bd);margin:16px 0 4px">
+    <label>ワーストシナリオ：次回に大爆死したらレートはどれだけ下がる？</label>
+    <button id="worst" type="button">大爆死シミュレーションを実行</button>
+    <div id="worstOut" class="tw" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<p class="note">計算式はAtCoder公式のアルゴリズム部門レーティング式に基づきます。表示レートは四捨五入で計算しており、公式と1程度ずれる場合があります。パフォーマンスは内部値(InnerPerformance)を使うため、400未満でも補正前の値で計算します。</p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const COLORS=[[400,'#804000','茶'],[800,'#008000','緑'],[1200,'#00c0c0','水'],[1600,'#0000ff','青'],[2000,'#c0c000','黄'],[2400,'#ff8000','橙'],[2800,'#ff0000','赤']];
+const cname=r=>['灰','茶','緑','水','青','黄','橙','赤'][Math.min(7,Math.floor(r/400))];
+let perfs=[],labels=[],mapMode=0;
+
+function rating(ps){ // ps: oldest -> newest
+  const n=ps.length; if(!n) return 0;
+  let num=0,den=0;
+  for(let k=0;k<n;k++){const i=n-k; const w=Math.pow(0.9,i); num+=w*Math.pow(2,ps[k]/800); den+=w;}
+  let r=800*Math.log2(num/den);
+  const f=(Math.sqrt(1-Math.pow(0.81,n))/(1-Math.pow(0.9,n))-1)/(Math.sqrt(19)-1);
+  r-=f*1200;
+  if(r<=400) r=400*Math.exp((r-400)/400);
+  return r;
+}
+const shown=r=>Math.round(r);
+
+function need(target){
+  let lo=-3000,hi=12000;
+  if(shown(rating([...perfs,hi]))<target) return null;
+  for(let i=0;i<60;i++){
+    const m=(lo+hi)/2;
+    if(shown(rating([...perfs,m]))>=target) hi=m; else lo=m;
+  }
+  return Math.ceil(hi);
+}
+
+function parse(){
+  if(!$("p1").hidden){
+    const d=JSON.parse($("json").value.trim());
+    if(!Array.isArray(d)) throw new Error("配列形式のJSONではありません");
+    const f=d.filter(x=>x.IsRated);labels=f.map(x=>(x.EndTime||'').slice(0,10)+' '+(x.ContestName||''));
+    const a=f.map(x=>x.InnerPerformance!=null?x.InnerPerformance:x.Performance);
+    return a.map(Number);
+  }
+  return $("manual").value.split(/[\s,，、]+/).filter(Boolean).map(Number);
+}
+
+function run(){
+  $("err").textContent="";
+  try{
+    labels=[];perfs=parse();
+    if(!perfs.length||perfs.some(isNaN)) throw new Error("有効なパフォーマンスがありません");
+  }catch(e){$("err").textContent="入力エラー: "+e.message;$("res").hidden=true;return;}
+  const cur=shown(rating(perfs));
+  $("n").textContent=perfs.length;
+  $("cur").textContent=cur;drawStats(cur);drawHist();drawMap();drawStable();
+  $("rows").innerHTML=COLORS.map(([t,c,name])=>{
+    const p=need(t);
+    const kind=cur>=t?"維持":"到達";
+    const val=p===null?'<span class="ng">到達不可</span>':`<b class="${kind==="維持"?"ok":"ng"}">${p}</b>`;
+    return `<tr><td><span class="dot" style="background:${c}"></span>${t}（${name}）</td><td>${kind}</td><td>${val}</td></tr>`;
+  }).join("");
+  $("res").hidden=false;
+  drawChart(cur);
+  drawForecast(cur);
+  simulate();
+  whatif();
+}
+function drawChart(cur){
+  const W=640,H=380,L=52,R=16,T=12,B=40,XM=3000,YM=4500;
+  const X=v=>L+v/XM*(W-L-R), Y=v=>T+(1-Math.max(0,Math.min(YM,v))/YM)*(H-T-B);
+  const data=[];
+  for(let t=0;t<=XM;t+=20) data.push([t,need(t)]);
+  let s=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;touch-action:none;display:block" font-size="11">`;
+  for(let y=0;y<=YM;y+=500) s+=`<line x1="${L}" x2="${W-R}" y1="${Y(y)}" y2="${Y(y)}" stroke="var(--bd)"/><text x="${L-6}" y="${Y(y)+4}" text-anchor="end" fill="var(--sub)">${y}</text>`;
+  const xt=[...COLORS.map(c=>c[0]),0,3000];
+  for(let i=0;i<=7;i++){const x=i*400; s+=`<line x1="${X(x)}" x2="${X(x)}" y1="${T}" y2="${H-B}" stroke="var(--bd)"/><text x="${X(x)}" y="${H-B+16}" text-anchor="middle" fill="var(--sub)">${x}</text>`;}
+  s+=`<text x="${X(3000)}" y="${H-B+16}" text-anchor="end" fill="var(--sub)">3000</text>`;
+  s+=`<text x="${(L+W-R)/2}" y="${H-4}" text-anchor="middle" fill="var(--sub)">目標レート</text>`;
+  s+=`<text transform="rotate(-90)" x="${-(T+H-B)/2}" y="12" text-anchor="middle" fill="var(--sub)">必要パフォーマンス</text>`;
+  s+=`<line x1="${X(cur)}" x2="${X(cur)}" y1="${T}" y2="${H-B}" stroke="var(--ac)" stroke-dasharray="4 4"/>`;
+  let d="",pen=false;
+  for(const [t,p] of data){ if(p===null){pen=false;continue;} d+=(pen?"L":"M")+X(t).toFixed(1)+" "+Y(p).toFixed(1)+" "; pen=true; }
+  s+=`<path d="${d}" fill="none" stroke="var(--ac)" stroke-width="2.5"/>`;
+  for(const [t,c] of COLORS){const p=need(t); if(p!==null) s+=`<circle cx="${X(t)}" cy="${Y(p)}" r="4.5" fill="${c}" stroke="var(--card)" stroke-width="1.5"/>`;}
+  s+=`<circle id="hv" r="5" fill="var(--ac)" stroke="var(--card)" stroke-width="2" cx="-20" cy="-20"/></svg>`;
+  $("chart").innerHTML=s;
+  const svg=$("chart").firstChild;
+  svg.onpointermove=e=>{
+    const r=svg.getBoundingClientRect(), vx=(e.clientX-r.left)/r.width*W;
+    const t=Math.max(0,Math.min(XM,Math.round((vx-L)/(W-L-R)*XM)));
+    const p=need(t), hv=$("hv");
+    if(p===null){hv.setAttribute("cx",-20);$("tip").textContent=`目標 ${t}：到達不可`;return;}
+    hv.setAttribute("cx",X(t));hv.setAttribute("cy",Y(p));
+    $("tip").textContent=`目標 ${t}（${t<=cur?"維持":"到達"}）：必要パフォーマンス ${p}${p>YM?"（グラフ範囲外）":""}`;
+  };
+}
+function quantile(s,q){const pos=(s.length-1)*q,lo=Math.floor(pos),hi=Math.ceil(pos);return s[lo]+(s[hi]-s[lo])*(pos-lo);}
+function drawForecast(cur){
+  const s=[...perfs].sort((a,b)=>a-b), N=10;
+  const Q=[["Q1（25%）",.25,"#2563eb"],["Q2 中央値",.5,"#16a34a"],["Q3（75%）",.75,"#d97706"],["Q4 最大",1,"#dc2626"]];
+  const series=Q.map(([n,q,c])=>{
+    const p=Math.round(quantile(s,q));
+    const path=[cur];
+    for(let k=1;k<=N;k++) path.push(shown(rating([...perfs,...Array(k).fill(p)])));
+    return {n,c,p,path};
+  });
+  $("qrows").innerHTML=series.map(o=>{
+    const nx=o.path[1], df=nx-cur;
+    return `<tr><td><span class="dot" style="background:${o.c}"></span>${o.n}</td><td>${o.p}</td><td><b>${nx}</b></td><td class="${df>=0?"ok":"ng"}">${df>=0?"+":""}${df}</td><td>${o.path[N]}</td></tr>`;
+  }).join("");
+  const W=640,H=300,L=52,R=16,T=12,B=56;
+  const all=series.flatMap(o=>o.path);
+  let lo=Math.min(...all),hi=Math.max(...all);
+  lo=Math.floor((lo-20)/100)*100; hi=Math.ceil((hi+20)/100)*100;
+  const X=k=>L+k/N*(W-L-R), Y=v=>T+(1-(v-lo)/(hi-lo))*(H-T-B);
+  const step=(hi-lo)>1500?500:(hi-lo)>600?200:100;
+  let g=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" font-size="11">`;
+  for(let y=Math.ceil(lo/step)*step;y<=hi;y+=step) g+=`<line x1="${L}" x2="${W-R}" y1="${Y(y)}" y2="${Y(y)}" stroke="var(--bd)"/><text x="${L-6}" y="${Y(y)+4}" text-anchor="end" fill="var(--sub)">${y}</text>`;
+  for(let k=0;k<=N;k++) g+=`<text x="${X(k)}" y="${H-B+16}" text-anchor="middle" fill="var(--sub)">${k}</text>`;
+  g+=`<text x="${(L+W-R)/2}" y="${H-B+32}" text-anchor="middle" fill="var(--sub)">今後のコンテスト回数</text>`;
+  series.forEach((o,i)=>{
+    g+=`<path d="${o.path.map((v,k)=>(k?"L":"M")+X(k).toFixed(1)+" "+Y(v).toFixed(1)).join(" ")}" fill="none" stroke="${o.c}" stroke-width="2.5"/>`;
+    g+=`<circle cx="${X(N)}" cy="${Y(o.path[N])}" r="3.5" fill="${o.c}"/>`;
+    const lx=L+i*140;
+    g+=`<rect x="${lx}" y="${H-12}" width="10" height="10" rx="2" fill="${o.c}"/><text x="${lx+14}" y="${H-3}" fill="var(--fg)">${o.n}</text>`;
+  });
+  g+=`</svg>`;
+  $("proj").innerHTML=g;
+}
+function reach(p){
+  const cur=shown(rating(perfs)), MAX=300;
+  const rows=COLORS.slice(0,3).map(([t,c,nm])=>{
+    let res;
+    if(cur>=t) res=`<span class='ok'>到達済み</span>`;
+    else{
+      const a=[...perfs]; let k=0;
+      while(k<MAX){a.push(p);k++; if(shown(rating(a))>=t)break;}
+      res=shown(rating(a))>=t?`<b>あと ${k} 回目</b>`:`<span class='ng'>到達不可（${MAX}回以内）</span>`;
+    }
+    return `<tr><td><span class='dot' style='background:${c}'></span>${nm}（${t}）</td><td>${res}</td></tr>`;
+  }).join('');
+  $('reach').innerHTML=`<p class='note' style='margin:12px 0 4px'>パフォーマンス ${p} を毎回出し続けた場合</p><table><thead><tr><th>目標</th><th>到達タイミング</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function worst(){
+  if(!perfs.length) return;
+  const cur=shown(rating(perfs)), s=[...perfs].sort((a,b)=>a-b);
+  const med=quantile(s,.5);
+  const sc=[['パフォーマンス 0',0],['中央値−1000',Math.max(0,Math.round(med-1000))],['履歴の最低値',Math.round(s[0])]];
+  const rows=sc.map(([n,p])=>{
+    const r=shown(rating([...perfs,p])), d=r-cur, f=cname(cur), t=cname(r);
+    return `<tr><td>${n}</td><td>${p}</td><td><b>${r}</b></td><td class='ng'><b>${d}</b></td><td>${f===t?f+'のまま':f+' → '+t}</td></tr>`;
+  }).join('');
+  $('worstOut').innerHTML=`<table><thead><tr><th>シナリオ</th><th>perf</th><th>次回レート</th><th>下落</th><th>色</th></tr></thead><tbody>${rows}</tbody></table><p class='note'>現在 ${cur}（${cname(cur)}）から計算。パフォーマンス0が最悪ケースです。</p>`;
+}
+function simulate(){
+  if(!perfs.length) return;
+  const n=perfs.length, cur=shown(rating(perfs)), S=1000, H=10;
+  const mean=perfs.reduce((a,b)=>a+b,0)/n;
+  const sd=n>1?Math.sqrt(perfs.reduce((a,b)=>a+(b-mean)**2,0)/(n-1)):0;
+  const fin=[], mx=[];
+  for(let s=0;s<S;s++){
+    const a=perfs.slice(); let m=-1e9, r=0;
+    for(let k=0;k<H;k++){
+      const u1=1-Math.random(), u2=Math.random();
+      const z=Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);
+      a.push(mean+sd*z); r=shown(rating(a)); if(r>m) m=r;
+    }
+    fin.push(r); mx.push(m);
+  }
+  const so=[...fin].sort((x,y)=>x-y), q=p=>so[Math.min(S-1,Math.floor(p*S))];
+  $('mcStat').innerHTML=`平均 ${Math.round(mean)} ／ 標準偏差 ${Math.round(sd)} ／ 10回後の中央値 ${q(.5)}（90%区間 ${q(.05)}〜${q(.95)}）`;
+  $('mcRows').innerHTML=COLORS.map(([t,c,nm])=>{
+    const pf=fin.filter(v=>v>=t).length/S*100, pa=mx.filter(v=>v>=t).length/S*100;
+    const bar=`<div style='height:6px;border-radius:3px;background:var(--bd);margin-top:3px;min-width:80px'><div style='height:6px;border-radius:3px;background:var(--ac);width:${pf}%'></div></div>`;
+    return `<tr><td><span class='dot' style='background:${c}'></span>${t}（${nm}）</td><td>${cur>=t?'維持':'到達'}</td><td><b>${pf.toFixed(1)}%</b>${bar}</td><td>${pa.toFixed(1)}%</td></tr>`;
+  }).join('');
+}
+const BANDS=['#808080',...COLORS.map(c=>c[1])];
+const bandOf=r=>BANDS[Math.min(7,Math.max(0,Math.floor(r/400)))];
+function ratingSeries(){return perfs.map((_,i)=>shown(rating(perfs.slice(0,i+1))));}
+function drawStats(cur){
+  const rs=ratingSeries(), n=perfs.length, mean=perfs.reduce((a,b)=>a+b,0)/n;
+  const sd=n>1?Math.sqrt(perfs.reduce((a,b)=>a+(b-mean)**2,0)/(n-1)):0;
+  const r5=perfs.slice(-5), m5=r5.reduce((a,b)=>a+b,0)/r5.length;
+  let up=0; for(let i=1;i<n;i++) if(rs[i]>rs[i-1]) up++;
+  $('maxr').textContent=Math.max(...rs);
+  $('maxp').textContent=Math.round(Math.max(...perfs));
+  $('avgp').textContent=Math.round(mean);
+  $('sdp').textContent=Math.round(sd);
+  $('rec5').textContent=Math.round(m5);
+  $('up').textContent=n>1?Math.round(up/(n-1)*100)+'%':'-';
+}
+function drawHist(){
+  const n=perfs.length, rs=ratingSeries();
+  const W=640,H=320,L=52,R=16,T=12,B=30;
+  const all=[...rs,...perfs];
+  const lo=Math.floor(Math.min(...all)/400)*400, hi=Math.max(lo+400,Math.ceil(Math.max(...all)/400)*400);
+  const X=i=>L+(n>1?i/(n-1):.5)*(W-L-R), Y=v=>T+(1-(v-lo)/(hi-lo))*(H-T-B);
+  let s=`<svg viewBox='0 0 ${W} ${H}' style='width:100%;height:auto;display:block;touch-action:none' font-size='11'>`;
+  for(let y=lo;y<=hi;y+=400) s+=`<line x1='${L}' x2='${W-R}' y1='${Y(y)}' y2='${Y(y)}' stroke='${bandOf(y)}' stroke-opacity='.5'/><text x='${L-6}' y='${Y(y)+4}' text-anchor='end' fill='var(--sub)'>${y}</text>`;
+  const st=Math.max(1,Math.ceil(n/8));
+  for(let i=0;i<n;i++) if(i%st===0||i===n-1) s+=`<text x='${X(i)}' y='${H-10}' text-anchor='middle' fill='var(--sub)'>${i+1}</text>`;
+  perfs.forEach((p,i)=>{s+=`<circle cx='${X(i)}' cy='${Y(p)}' r='3' fill='var(--sub)' fill-opacity='.55'/>`;});
+  s+=`<path d='${rs.map((v,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1)).join(' ')}' fill='none' stroke='var(--ac)' stroke-width='2.5'/>`;
+  s+=`<circle id='hh' r='5' fill='var(--ac)' stroke='var(--card)' stroke-width='2' cx='-20' cy='-20'/></svg>`;
+  $('hist').innerHTML=s;
+  const svg=$('hist').firstChild;
+  svg.onpointermove=e=>{
+    const r=svg.getBoundingClientRect(), vx=(e.clientX-r.left)/r.width*W;
+    const i=n>1?Math.max(0,Math.min(n-1,Math.round((vx-L)/(W-L-R)*(n-1)))):0;
+    const hh=$('hh'); hh.setAttribute('cx',X(i)); hh.setAttribute('cy',Y(rs[i]));
+    const d=rs[i]-(i?rs[i-1]:0);
+    $('histTip').textContent=`${i+1}回目 ${labels[i]||''}：perf ${Math.round(perfs[i])} → レート ${rs[i]}（${i?(d>=0?'+':'')+d:'初回'}）`;
+  };
+}
+function drawMap(){
+  const cur=shown(rating(perfs)), K=10, rows=[];
+  let maxAbs=1;
+  for(let p=3600;p>=0;p-=200){
+    const a=[...perfs], v=[];
+    for(let k=1;k<=K;k++){a.push(p);v.push(shown(rating(a)));}
+    rows.push([p,v]); v.forEach(r=>{maxAbs=Math.max(maxAbs,Math.abs(r-cur));});
+  }
+  let h=`<table style='border-collapse:separate;border-spacing:0'><thead><tr><th style='text-align:left'>perf＼回</th>`+Array.from({length:K},(_,i)=>`<th style='text-align:center'>${i+1}</th>`).join('')+`</tr></thead><tbody>`;
+  rows.forEach(([p,v])=>{
+    h+=`<tr><td style='text-align:left;padding:3px 6px;font-weight:${Math.abs(p-cur)<100?700:400}'>${p}</td>`;
+    v.forEach(r=>{
+      const d=r-cur; let bg,txt;
+      if(mapMode===0){const al=Math.min(.8,.1+Math.abs(d)/maxAbs*.7); bg=d>0?`rgba(34,197,94,${al})`:d<0?`rgba(239,68,68,${al})`:'transparent'; txt=(d>0?'+':'')+d;}
+      else{bg=bandOf(r)+'66'; txt=r;}
+      h+=`<td style='text-align:center;padding:4px 2px;font-size:.75rem;background:${bg};border:1px solid var(--card)'>${txt}</td>`;
+    });
+    h+='</tr>';
+  });
+  $('map').innerHTML=h+'</tbody></table>';
+}
+function drawStable(){
+  if(!perfs.length) return;
+  const n=perfs.length, cur=shown(rating(perfs)), k=Number($('stK').value);
+  const s=[...perfs].sort((a,b)=>a-b);
+  const q1=quantile(s,.25), q3=quantile(s,.75), iqr=q3-q1, lf=q1-k*iqr, hf=q3+k*iqr;
+  const lowI=[], highI=[], kp=[];
+  perfs.forEach((p,i)=>{ if(n>=4&&p<lf) lowI.push(i); else if(n>=4&&p>hf) highI.push(i); else kp.push(p); });
+  const mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
+  const ks=[...kp].sort((a,b)=>a-b);
+  const med=quantile(s,.5);
+  const t=n>=5?Math.max(1,Math.floor(n*.1)):0, trimM=mean(s.slice(t,n-t));
+  const keepM=mean(kp);
+  const recMed=quantile([...perfs.slice(-10)].sort((a,b)=>a-b),.5);
+  const stable=(med+trimM+keepM)/3;
+  const stR=shown(rating(kp)), d=stR-cur;
+  $('stR').textContent=stR;
+  $('stD').innerHTML=`<span class='${d>=0?'ok':'ng'}'>${d>=0?'+':''}${d}</span>`;
+  $('stP').textContent=Math.round(stable);
+  $('stRg').textContent=`${Math.round(quantile(ks,.25))}〜${Math.round(quantile(ks,.75))}`;
+  $('stO').textContent=`${lowI.length}／${highI.length}`;
+  const M=[['中央値',med],['10%トリム平均',trimM],['外れ値除外平均',keepM],['直近10回の中央値',recMed],['総合（中央値・トリム・除外の平均）',stable]];
+  $('stRows').innerHTML=M.map(([nm,v],i)=>{
+    const df=Math.round(v)-cur, b=i===M.length-1;
+    return `<tr><td>${b?'<b>'+nm+'</b>':nm}</td><td>${b?'<b>'+Math.round(v)+'</b>':Math.round(v)}</td><td class='${df>=0?'ok':'ng'}'>${df>=0?'+':''}${df}</td></tr>`;
+  }).join('');
+  const fmt=a=>a.length?a.map(i=>`#${i+1}（${Math.round(perfs[i])}）`).join('、'):'なし';
+  $('stList').innerHTML=`下振れ（${Math.round(lf)}未満）：${fmt(lowI)}<br>上振れ（${Math.round(hf)}超）：${fmt(highI)}`;
+  const lo=Math.floor(s[0]/200)*200, hi=Math.ceil((s[n-1]+1)/200)*200, nb=(hi-lo)/200;
+  const nc=Array(nb).fill(0), lc=Array(nb).fill(0), hc=Array(nb).fill(0);
+  perfs.forEach((p,i)=>{const b=Math.min(nb-1,Math.floor((p-lo)/200)); if(lowI.includes(i))lc[b]++; else if(highI.includes(i))hc[b]++; else nc[b]++;});
+  const W=640,H=220,L=36,R=16,T=10,B=28;
+  const mx=Math.max(1,...nc.map((v,i)=>v+lc[i]+hc[i]));
+  const X=v=>L+(v-lo)/(hi-lo)*(W-L-R), Y=v=>T+(1-v/mx)*(H-T-B), bw=(W-L-R)/nb;
+  let g=`<svg viewBox='0 0 ${W} ${H}' style='width:100%;height:auto;display:block' font-size='11'>`;
+  for(let y=0;y<=mx;y+=Math.max(1,Math.ceil(mx/5))) g+=`<line x1='${L}' x2='${W-R}' y1='${Y(y)}' y2='${Y(y)}' stroke='var(--bd)'/><text x='${L-6}' y='${Y(y)+4}' text-anchor='end' fill='var(--sub)'>${y}</text>`;
+  for(let v=lo;v<=hi;v+=Math.max(200,Math.ceil((hi-lo)/8/200)*200)) g+=`<text x='${X(v)}' y='${H-10}' text-anchor='middle' fill='var(--sub)'>${v}</text>`;
+  for(let b=0;b<nb;b++){
+    let y0=0;
+    [[nc[b],'var(--ac)'],[lc[b],'#d97706'],[hc[b],'#16a34a']].forEach(([c,col])=>{
+      if(c){g+=`<rect x='${L+b*bw+1}' y='${Y(y0+c)}' width='${bw-2}' height='${Y(y0)-Y(y0+c)}' fill='${col}' rx='2'/>`; y0+=c;}
+    });
+  }
+  g+=`<line x1='${X(stable)}' x2='${X(stable)}' y1='${T}' y2='${H-B}' stroke='var(--fg)' stroke-width='2' stroke-dasharray='5 4'/><text x='${X(stable)+4}' y='${T+10}' fill='var(--fg)'>安定perf ${Math.round(stable)}</text></svg>`;
+  $('stHist').innerHTML=g;
+}
+function setMap(m){mapMode=m;$('m1').classList.toggle('on',m===0);$('m2').classList.toggle('on',m===1);if(perfs.length)drawMap();}
+function whatif(){
+  const v=$("whatif").value;
+  if(v===""||!perfs.length){$("whatifOut").textContent="";$("reach").innerHTML="";return;}
+  reach(Number(v));
+  const r=shown(rating([...perfs,Number(v)])), cur=shown(rating(perfs));
+  $("whatifOut").textContent=`次回 ${v} → レート ${r}（${r-cur>=0?"+":""}${r-cur}）`;
+}
+function tab(a){
+  $("p1").hidden=!a; $("p2").hidden=a;
+  $("t1").classList.toggle("on",a); $("t2").classList.toggle("on",!a);
+}
+$("t1").onclick=()=>tab(true);
+$("t2").onclick=()=>tab(false);
+$("go").onclick=run;
+$("whatif").oninput=whatif;
+$("worst").onclick=worst;
+$("resim").onclick=simulate;
+$('m1').onclick=()=>setMap(0);
+$('m2').onclick=()=>setMap(1);
+$('stK').onchange=drawStable;
+</script>
+</body>
+</html>
